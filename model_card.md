@@ -21,32 +21,12 @@ Prompts:
 
 ## 3. How the Model Works  
 
-Explain your scoring approach in simple language.  
-
-Prompts:  
-
-- What features of each song are used (genre, energy, mood, etc.)  
-- What user preferences are considered  
-- How does the model turn those into a score  
-- What changes did you make from the starter logic  
-
-Avoid code here. Pretend you are explaining the idea to a friend who does not program.
-
 My recommender looks at four things about each song: its genre, mood, how energetic and how acoustic it is. The recommender then compares them to what a listener says they like. Genre and mood are simple yes/no matches: the song either fits your favorite or not. Energy is judged by closeness: a song whose energy is near your target scores well, and the further away it is the less it scores. 
 The system adds these up into a single number for each song, then sorts every song by that number and shows you the highest.
 
 ---
 
 ## 4. Data  
-
-Describe the dataset the model uses.  
-
-Prompts:  
-
-- How many songs are in the catalog  
-- What genres or moods are represented  
-- Did you add or remove data  
-- Are there parts of musical taste missing in the dataset  
 
 The catalog starts as a CSV of songs, each described by attributes like genre, mood, energy, tempo, valence, danceability, and acousticness. (Note: the starter has 10 songs; I will expand it to at least 15–20 in the design phase.)
 

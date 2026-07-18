@@ -17,27 +17,10 @@ Replace this paragraph with your own summary of what your version does.
 
 ## How The System Works
 
-Explain your design in plain language.
+This project is a **content-based** music recommender. It looks at the attributes of each song and matches them against a single user's stated taste. In other words: "this song is *like* the songs you already like."
 
-Some prompts to answer:
-
-- What features does each `Song` use in your system
-  - For example: genre, mood, energy, tempo
-- What information does your `UserProfile` store
-- How does your `Recommender` compute a score for each song
-- How do you choose which songs to recommend
-
-You can include a simple diagram or bullet list if helpful.
-
-This project is a **content-based** music recommender. It looks at the attributes of
-each song and matches them against a single user's stated taste. In other words:
-"this song is *like* the songs you already like."
-
-This is different from **collaborative filtering**, the approach behind apps like 
-Spotify's Discover Weekly, which ignores song attributes and instead looks at the 
-behavior of a *crowd*: "people who listen to what you listen to also loved this." 
-Collaborative filtering isn't just unused here, it's impossible: I only have data for 
-one user and no record of any crowd's listening behavior, so I must match on song attributes instead.
+This is different from **collaborative filtering**, the approach behind apps like Spotify's Discover Weekly, which ignores song attributes and instead looks at the behavior of a *crowd*: "people who listen to what you listen to also loved this." 
+Collaborative filtering isn't just unused here, it's impossible: I only have data for one user and no record of any crowd's listening behavior, so I must match on song attributes instead.
 
 Every content-based recommender works in three stages:
 
