@@ -9,7 +9,8 @@ You will implement the functions in recommender.py:
 - recommend_songs
 """
 
-from .recommender import load_songs, recommend_songs
+from .recommender import load_songs, recommend_songs, SCORING_MODES
+from tabulate import tabulate
 
 def main() -> None:
     songs = load_songs("data/songs.csv")
@@ -44,9 +45,8 @@ def main() -> None:
         recommendations = recommend_songs(user_prefs, songs, k=5)
 
         print("Top 5 recommendations:\n")
-        for i, (song, score, explanation) in enumerate(recommendations, start=1):
-            print(f"  {i}. {song['title']} by {song['artist']} — Score: {score:.2f}")
-            print(f"     Because: {explanation}\n")
+        print(format_recommendations_table(recommendations, name))
+        print()
 
 def experiment_weight_shift() -> None:
     """
@@ -73,11 +73,88 @@ def experiment_weight_shift() -> None:
 
     recommendations = recommend_songs(weird_prefs, songs, k=5)
     print("Top 5 recommendations:\n")
-    for i, (song, score, explanation) in enumerate(recommendations, start=1):
-        print(f"  {i}. {song['title']} — Score: {score:.2f}  (energy {song['energy']})")
-        print(f"     {explanation}\n")
+    print(format_recommendations_table(recommendations, "Adversarial profile"))
+    print()
 
+def experiment_diversity_penalty() -> None:
+    """
+    Stretch: Diversity / Fairness. The default "High-Energy Pop" profile
+    surfaces the same artist (Neon Echo) twice in its top 5. This demo runs
+    that profile with the artist penalty OFF, then ON, so you can see the
+    repetition get broken up in favour of a fresh artist.
+    """
+    songs = load_songs("data/songs.csv")
+
+    prefs = {
+        "favorite_genre": "pop",
+        "favorite_mood": "happy",
+        "target_energy": 0.8,
+        "likes_acoustic": False,
+    }
+
+    print("\n" + "=" * 70)
+    print("EXPERIMENT: Diversity / artist penalty (High-Energy Pop profile)")
+    print("=" * 70)
+
+    print("\nBEFORE — no penalty (pure score ranking):\n")
+    baseline = recommend_songs(prefs, songs, k=5, diversity_penalty=0.0)
+    print(format_recommendations_table(baseline, "No penalty"))
+
+    print("\nAFTER — artist penalty = 1.0 per repeat:\n")
+    diversified = recommend_songs(prefs, songs, k=5, diversity_penalty=1.0)
+    print(format_recommendations_table(diversified, "Artist penalty"))
+    print()
+
+def format_recommendations_table(
+    recommendations: list,
+    profile_name: str,
+) -> str:
+    """
+    Format recommendations as a nicely-aligned table using tabulate.
+    Displays rank, title, artist, score, and the reasons for the score.
+    """
+    rows = []
+    for i, (song, score, explanation) in enumerate(recommendations, start=1):
+        rows.append([
+            i,
+            song["title"],
+            song["artist"],
+            f"{score:.2f}",
+            explanation,
+        ])
+
+    headers = ["#", "Title", "Artist", "Score", "Reasons"]
+    return tabulate(rows, headers=headers, tablefmt="rounded_grid", maxcolwidths=[3, 22, 20, 7, 60])
+
+def experiment_ranking_modes() -> None:
+    """
+    Stretch: Multiple ranking modes via a Strategy pattern. Runs the same
+    High-Energy Pop profile through three interchangeable scoring strategies
+    so you can see how the same listener gets ranked differently depending
+    on which mode is active.
+    """
+    songs = load_songs("data/songs.csv")
+
+    prefs = {
+        "favorite_genre": "pop",
+        "favorite_mood": "happy",
+        "target_energy": 0.8,
+        "likes_acoustic": False,
+    }
+
+    print("\n" + "=" * 70)
+    print("EXPERIMENT: Ranking modes (Strategy pattern) — High-Energy Pop")
+    print("=" * 70)
+
+    for mode_key in ("balanced", "genre-first", "energy-similarity"):
+        strategy = SCORING_MODES[mode_key]
+        print(f"\nMode: {strategy.name}  [key='{mode_key}']\n")
+        recs = recommend_songs(prefs, songs, k=3, strategy=strategy)
+        print(format_recommendations_table(recs, strategy.name))
+    print()
 
 if __name__ == "__main__":
     main()
     experiment_weight_shift()
+    experiment_diversity_penalty()
+    experiment_ranking_modes()

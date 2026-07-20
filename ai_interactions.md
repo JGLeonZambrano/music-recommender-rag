@@ -1,43 +1,25 @@
 # AI Interactions Log
 
-> **Stretch features only.** Only fill in the sections that apply to stretch features you attempted. If you did not attempt a stretch feature, leave its section blank or delete it. This file is not required for the core project.
+> **Stretch features only.** Only fill in the sections that apply to stretch features you attempted.
 
 ---
 
-## Agentic Workflow (SF8)
-
-> Document your experience using an AI agent (e.g., Cursor Agent, Claude, Copilot) to make multi-step changes autonomously.
-
-**What task did you give the agent?**
-
-<!-- Describe the goal you asked the agent to accomplish -->
-
-**Prompts used:**
-
-<!-- Paste the key prompts you gave the agent -->
-
-**What did the agent generate or change?**
-
-<!-- List the files edited, code generated, or commands run -->
-
-**What did you verify or fix manually?**
-
-<!-- Describe anything the agent got wrong or that required human review -->
-
----
-
-## Design Pattern (SF10)
-
-> Document how AI helped you choose or implement a design pattern.
+## Design Pattern (SF10) — Multiple Ranking Modes
 
 **Which design pattern did you use?**
 
-<!-- e.g., Strategy, Factory, Observer, etc. -->
+The **Strategy pattern**. Each ranking mode is a `ScoringStrategy` dataclass holding a set of weights (genre, mood, energy, acoustic). The scoring algorithm stays the same; swapping the strategy swaps the behavior. Modes are registered in a `SCORING_MODES` dictionary so new modes can be added without touching `score_song`.
 
 **How did AI help you brainstorm or implement it?**
 
-<!-- Describe the conversation or suggestions that led to your decision -->
+I described what I wanted — two or more interchangeable ranking modes a user could switch between — and asked the AI assistant how to keep it modular instead of writing an `if mode == "...":` chain inside the scoring function. It suggested extracting the weights into a small strategy object and selecting by name from a registry, and flagged the key constraint: keep the default ("balanced") weights identical to the original recipe so the existing pytest suite and prior output wouldn't change. It also caught that a mode which zeroes out a feature would otherwise print a misleading `+0.0` reason, so we guarded each rule to skip zero-weight features.
 
 **How does the pattern appear in your final code?**
 
-<!-- Point to the relevant class or method -->
+- `ScoringStrategy` dataclass and the `SCORING_MODES` registry in `src/recommender.py`.
+- `score_song(user_prefs, song, strategy=None)` and `recommend_songs(..., strategy=None)` accept a strategy; `None` falls back to the balanced default.
+- `experiment_ranking_modes()` in `src/main.py` runs the same profile through all three modes so a user can compare and switch.
+
+**What did you verify manually?**
+
+Confirmed the default (no-strategy) output is byte-for-byte identical to before the change, that the reconstructed sorted-by-score test still passes, and that the three modes produce genuinely different Top-3 rankings for the same listener (Genre-First promotes Gym Hero; Energy-Similarity pulls in Night Drive Loop).

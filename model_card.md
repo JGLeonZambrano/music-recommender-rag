@@ -33,6 +33,14 @@ My recommender looks at four things about each song: its genre, mood, how energe
 - Energy closeness: up to +2.0, sliding down as the gap grows
 - Acoustic preference match: +1.0
 
+### Optional: Diversity / Artist Penalty (fairness feature)
+
+The ranker supports an optional **artist penalty** (off by default). When enabled, each time a song is selected, any remaining song by an already-chosen artist has its effective score reduced, so the same artist cannot dominate the Top-5. This is a deliberate **fairness / anti-"filter-bubble"** measure: without it, a listener who matched strongly on one artist could have that artist crowd out otherwise-worthy songs by others. With the default High-Energy Pop profile, Neon Echo appears twice in the unpenalized Top-5 (*Sunrise City* #1, *Night Drive Loop* #4); enabling the penalty pushes the second Neon Echo track out in favor of *Concrete Bloom* by a different artist, giving every Top-5 slot a unique artist. Crucially, the #1 pick is unchanged — the penalty improves variety without weakening the strongest match. See the README "Diversity experiment" for the before/after tables.
+
+### Ranking modes (Strategy pattern)
+
+Scoring weights are bundled into interchangeable `ScoringStrategy` objects (a Strategy pattern) and selected from a `SCORING_MODES` registry: **Balanced** (the default recipe), **Genre-First** (exact-genre matches dominate), and **Energy-Similarity** (rank purely by energy closeness). The same listener produces a different ranking under each mode — e.g., Genre-First promotes "Gym Hero" above "Rooftop Lights," while Energy-Similarity drops "Gym Hero" out of the Top-3 in favor of "Night Drive Loop." This makes the model's central lesson concrete: the weighting *is* the opinion, and changing modes changes whose songs win. The default mode is unchanged, so all other results and the test suite are unaffected.
+
 ---
 
 ## 4. Data
@@ -40,7 +48,7 @@ My recommender looks at four things about each song: its genre, mood, how energe
 The catalog starts as a CSV of songs, each described by attributes like genre, mood, energy, tempo, valence, danceability, and acousticness. The starter had 10 songs; I expanded it to 18 by adding songs across genres the starter lacked (hip-hop, punk, tango) and moods the starter was thin on (sad, angry). I deliberately included:
 
 - Songs at both energy extremes (0.18 to 0.95) to stress-test the closeness formula.
-- Two songs sharing an artist (Redline Riot) to set up a later diversity feature.
+- Two songs sharing an artist (Redline Riot) — and several other repeated artists (Neon Echo, Voltline, Paper Lanterns, LoRoom) — which the implemented diversity / artist-penalty feature acts on.
 - Highly acoustic and non-acoustic tracks to exercise the acoustic bonus.
 
 A limitation worth naming explicitly: this is a very small catalog that cannot represent the full range of musical taste (let alone music), and it only models one user at a time.
@@ -111,8 +119,8 @@ What a user *says* they like often disagrees with what they *actually stream*. A
 
 - **Asymmetric acoustic bonus.** Only award the +1.0 when `likes_acoustic=True`, so the majority of users don't get inflated scores from a preference they didn't express.
 
-- **Diversity penalty.**
-Reduce the score of songs that share an artist or genre with a song already in the top results, to prevent the Top-5 from being dominated by one artist or one genre (see for example the Chill Acoustic result, where "Paper Lanterns" appears twice).
+- **Extend the diversity penalty to genre.**
+The artist penalty is implemented (see Section 3). A natural next step is to also penalize songs sharing a *genre* with songs already in the Top results, to prevent one genre (not just one artist) from dominating (e.g., the Chill Acoustic result leans heavily on acoustic/lofi tracks).
 
 - **Add valence back in.**
 I deliberately set aside valence (happy-vs-sad measure) in v1 to keep the recipe focused. Adding it would let the system distinguish between "happy" and "sad" songs beyond the mood label alone, since mood is a coarse categorical while valence is a smooth numeric.

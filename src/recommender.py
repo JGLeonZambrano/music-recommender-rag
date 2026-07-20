@@ -89,43 +89,82 @@ def load_songs(csv_path: str) -> List[Dict]:
 
     return songs
 
-def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
+@dataclass
+class ScoringStrategy:
+    """
+    A named bundle of scoring weights (a lightweight Strategy pattern).
+
+    Each strategy is an interchangeable "ranking mode": swapping the strategy
+    passed to score_song / recommend_songs changes how songs are ranked
+    without touching the scoring logic itself. This keeps the algorithm
+    modular — new modes are added by registering a new ScoringStrategy, not
+    by editing score_song.
+    """
+    name: str
+    genre_weight: float
+    mood_weight: float
+    energy_weight: float
+    acoustic_weight: float
+
+# Registry of selectable ranking modes. "balanced" reproduces the original
+# recipe exactly, so default behaviour (and the test suite) is unchanged.
+SCORING_MODES: Dict[str, ScoringStrategy] = {
+    "balanced": ScoringStrategy("Balanced (default)", 1.5, 2.0, 2.0, 1.0),
+    "genre-first": ScoringStrategy("Genre-First", 3.0, 1.0, 1.0, 0.5),
+    "energy-similarity": ScoringStrategy("Energy-Similarity", 0.0, 0.0, 4.0, 0.0),
+}
+
+DEFAULT_STRATEGY = SCORING_MODES["balanced"]
+
+def score_song(
+    user_prefs: Dict,
+    song: Dict,
+    strategy: Optional[ScoringStrategy] = None,
+) -> Tuple[float, List[str]]:
     """
     Score a single song against user preferences.
+
+    Args:
+        strategy: A ScoringStrategy selecting the ranking mode (weights).
+            Defaults to the "balanced" strategy, which matches the original
+            recipe below exactly.
 
     Returns:
         (score, reasons) - a float score and a list of human-readable
         strings explaining why each point was awarded.
 
-    Scoring recipe:
+    Balanced recipe (default weights):
       - Genre match:       +1.5
       - Mood match:        +2.0  (weighted higher because mood tracks
                                   the user's felt experience)
       - Energy closeness:  up to +2.0, sliding down as the gap grows
-                           formula: 2.0 * (1 - |song_energy - target|)
+                           formula: energy_weight * (1 - |song_energy - target|)
       - Acoustic match:    +1.0 when the song's acousticness aligns
                            with the user's likes_acoustic preference
                            (treating acousticness >= 0.5 as "acoustic")
     """
+    if strategy is None:
+        strategy = DEFAULT_STRATEGY
+
     score = 0.0
     reasons: List[str] = []
 
     # --- Genre match (category) ---
-    if song["genre"] == user_prefs.get("favorite_genre"):
-        score += 1.5
-        reasons.append(f"genre match ({song['genre']}) +1.5")
+    if strategy.genre_weight and song["genre"] == user_prefs.get("favorite_genre"):
+        score += strategy.genre_weight
+        reasons.append(f"genre match ({song['genre']}) +{strategy.genre_weight}")
 
     # --- Mood match (category) ---
-    if song["mood"] == user_prefs.get("favorite_mood"):
-        score += 2.0
-        reasons.append(f"mood match ({song['mood']}) +2.0")
+    if strategy.mood_weight and song["mood"] == user_prefs.get("favorite_mood"):
+        score += strategy.mood_weight
+        reasons.append(f"mood match ({song['mood']}) +{strategy.mood_weight}")
 
     # --- Energy closeness (numeric) ---
     target_energy = user_prefs.get("target_energy")
-    if target_energy is not None:
+    if strategy.energy_weight and target_energy is not None:
         gap = abs(song["energy"] - target_energy)
         closeness = 1.0 - gap  # gap is 0..1, so closeness is 1..0
-        energy_points = 2.0 * closeness
+        energy_points = strategy.energy_weight * closeness
         score += energy_points
         reasons.append(
             f"energy {song['energy']:.2f} vs target {target_energy:.2f} "
@@ -134,12 +173,12 @@ def score_song(user_prefs: Dict, song: Dict) -> Tuple[float, List[str]]:
 
     # --- Acoustic match (boolean preference on numeric column) ---
     likes_acoustic = user_prefs.get("likes_acoustic")
-    if likes_acoustic is not None:
+    if strategy.acoustic_weight and likes_acoustic is not None:
         song_is_acoustic = song["acousticness"] >= 0.5
         if song_is_acoustic == likes_acoustic:
-            score += 1.0
+            score += strategy.acoustic_weight
             side = "acoustic" if likes_acoustic else "non-acoustic"
-            reasons.append(f"acoustic preference match ({side}) +1.0")
+            reasons.append(f"acoustic preference match ({side}) +{strategy.acoustic_weight}")
 
     return (score, reasons)
 
@@ -147,21 +186,63 @@ def recommend_songs(
     user_prefs: Dict,
     songs: List[Dict],
     k: int = 5,
+    diversity_penalty: float = 0.0,
+    strategy: Optional[ScoringStrategy] = None,
 ) -> List[Tuple[Dict, float, str]]:
     """
     Rank every song by score and return the top k.
 
+    Args:
+        strategy: A ScoringStrategy (ranking mode) passed through to
+            score_song. Defaults to the "balanced" strategy, leaving the
+            original ranking unchanged.
+        diversity_penalty: If > 0, applies a greedy "artist penalty" during
+            selection. Each time a song is chosen, every remaining song by an
+            already-selected artist has its effective score reduced by
+            diversity_penalty per prior appearance of that artist. This stops
+            one artist from dominating the list (a simple guard against
+            "filter bubbles"). When 0.0 (the default), behaviour is unchanged:
+            a pure highest-score-first ranking.
+
     Returns:
-        A list of (song, score, explanation) tuples, sorted from
-        highest score to lowest. Length is min(k, len(songs)).
+        A list of (song, score, explanation) tuples. Length is
+        min(k, len(songs)). When a penalty is applied, the reported score is
+        the effective (post-penalty) score and the explanation notes it.
     """
     scored: List[Tuple[Dict, float, str]] = []
     for song in songs:
-        score, reasons = score_song(user_prefs, song)
+        score, reasons = score_song(user_prefs, song, strategy)
         explanation = "; ".join(reasons) if reasons else "no matching features"
         scored.append((song, score, explanation))
 
     # Sort by score, highest first.
     scored.sort(key=lambda item: item[1], reverse=True)
 
-    return scored[:k]
+    # Default path: pure score ranking (keeps existing tests/behaviour intact).
+    if diversity_penalty <= 0:
+        return scored[:k]
+
+    # Diversity-aware path: greedy re-rank with an artist penalty.
+    selected: List[Tuple[Dict, float, str]] = []
+    remaining = scored[:]
+    artist_counts: Dict[str, int] = {}
+
+    while remaining and len(selected) < k:
+        best_idx = 0
+        best_effective = None
+        for idx, (song, score, _explanation) in enumerate(remaining):
+            penalty = diversity_penalty * artist_counts.get(song["artist"], 0)
+            effective = score - penalty
+            if best_effective is None or effective > best_effective:
+                best_effective = effective
+                best_idx = idx
+
+        song, score, explanation = remaining.pop(best_idx)
+        prior = artist_counts.get(song["artist"], 0)
+        penalty = diversity_penalty * prior
+        if penalty > 0:
+            explanation = f"{explanation}; artist penalty (-{penalty:.2f})"
+        artist_counts[song["artist"]] = prior + 1
+        selected.append((song, score - penalty, explanation))
+
+    return selected
