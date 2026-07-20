@@ -43,8 +43,17 @@ I deliberately left out two available columns:
 
 My `UserProfile` stores: favorite_genre, favorite_mood, target_energy, and likes_acoustic.
 
-<!-- TODO: Add the scoring recipe here once weights are decided (Phase 1 Step 3). -->
+### Scoring Recipe
 
+Each song earns points from four rules; its total score is the sum of whichever apply.
+
+- **Genre match:** +1.5 if the song's genre equals the user's favorite genre.
+- **Mood match:** +2.0 if the song's mood equals the user's favorite mood.
+  (Weighted higher than genre because mood tracks the user's felt experience, which is what a "vibe" recommender is really trying to match.)
+- **Energy closeness:** up to +2.0, based on how close the song's energy is to the user's target. A perfect match earns the full 2.0; the reward slides down toward 0 as the gap grows (formula: `2.0 × (1 − |song − target|)`).
+- **Acoustic bonus:** +1.0 when the song's acousticness aligns with the user's `likes_acoustic` preference (treating acousticness ≥ 0.5 as "acoustic").
+
+**Scoring vs Ranking.** The scoring rule above judges a *single* song. The ranking rule then applies that score to every song in the catalog and sorts them high-to-low, returning the top *k* as recommendations. Scoring produces a number; ranking picks the winners.
 
 ---
 
