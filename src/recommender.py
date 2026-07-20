@@ -31,19 +31,41 @@ class UserProfile:
 
 class Recommender:
     """
-    OOP implementation of the recommendation logic.
-    Required by tests/test_recommender.py
+    Thin OOP wrapper around the functional scoring/ranking logic.
+
+    Exists so tests in tests/test_recommender.py can use a class-based
+    interface while the core logic lives in the module-level functions
+    load_songs, score_song, and recommend_songs.
     """
+
     def __init__(self, songs: List[Song]):
         self.songs = songs
 
     def recommend(self, user: UserProfile, k: int = 5) -> List[Song]:
-        # TODO: Implement recommendation logic
-        return self.songs[:k]
+        """Return the top k Song objects ranked by score for this user."""
+        user_prefs = {
+            "favorite_genre": user.favorite_genre,
+            "favorite_mood": user.favorite_mood,
+            "target_energy": user.target_energy,
+            "likes_acoustic": user.likes_acoustic,
+        }
+        # Convert Song dataclasses to dicts so score_song can read them.
+        song_dicts = [song.__dict__ for song in self.songs]
+        ranked = recommend_songs(user_prefs, song_dicts, k=k)
+        # Map back to the original Song objects preserving order.
+        title_to_song = {s.title: s for s in self.songs}
+        return [title_to_song[song_dict["title"]] for song_dict in [r[0] for r in ranked]]
 
     def explain_recommendation(self, user: UserProfile, song: Song) -> str:
-        # TODO: Implement explanation logic
-        return "Explanation placeholder"
+        """Return a plain-language string explaining why this song ranks where it does."""
+        user_prefs = {
+            "favorite_genre": user.favorite_genre,
+            "favorite_mood": user.favorite_mood,
+            "target_energy": user.target_energy,
+            "likes_acoustic": user.likes_acoustic,
+        }
+        _score, reasons = score_song(user_prefs, song.__dict__)
+        return "; ".join(reasons) if reasons else "no matching features"
 
 def load_songs(csv_path: str) -> List[Dict]:
     """
