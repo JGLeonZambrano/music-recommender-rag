@@ -2,16 +2,7 @@
 
 ## Project Summary
 
-In this project you will build and explain a small music recommender system.
-
-Your goal is to:
-
-- Represent songs and a user "taste profile" as data
-- Design a scoring rule that turns that data into recommendations
-- Evaluate what your system gets right and wrong
-- Reflect on how this mirrors real world AI recommenders
-
-Replace this paragraph with your own summary of what your version does.
+This project builds a small **content-based** music recommender. It reads a catalog of 18 songs from `data/songs.csv`, scores each one against a listener's taste profile (favorite genre, favorite mood, target energy, and acoustic preference), and returns the top *k* ranked songs along with plain-language reasons for each recommendation.
 
 ---
 
@@ -98,16 +89,34 @@ You can add more tests in `tests/test_recommender.py`.
 
 ## Sample Recommendation Output
 
-Paste a sample of your recommender's output here as a text block so a reader can see what it produces:
+## Sample Recommendation Output
+
+Running `python -m src.main` with the default pop/happy/high-energy
+listener profile produces:
 
 ```
-# e.g.:
-# User profile: genre=indie, mood=chill, energy=low
-# Recommendations:
-#   1. ...
-#   2. ...
-#   3. ...
+User profile: {'favorite_genre': 'pop', 'favorite_mood': 'happy', 'target_energy': 0.8, 'likes_acoustic': False}
+Catalog size: 18 songs
+
+Top recommendations:
+
+1. Sunrise City by Neon Echo — Score: 6.46
+   Because: genre match (pop) +1.5; mood match (happy) +2.0; energy 0.82 vs target 0.80 (+1.96); acoustic preference match (non-acoustic) +1.0
+
+2. Rooftop Lights by Indigo Parade — Score: 4.92
+   Because: mood match (happy) +2.0; energy 0.76 vs target 0.80 (+1.92); acoustic preference match (non-acoustic) +1.0
+
+3. Gym Hero by Max Pulse — Score: 4.24
+   Because: genre match (pop) +1.5; energy 0.93 vs target 0.80 (+1.74); acoustic preference match (non-acoustic) +1.0
+
+4. Night Drive Loop by Neon Echo — Score: 2.90
+   Because: energy 0.75 vs target 0.80 (+1.90); acoustic preference match (non-acoustic) +1.0
+
+5. Neon Alibi by Voltline — Score: 2.88
+   Because: energy 0.86 vs target 0.80 (+1.88); acoustic preference match (non-acoustic) +1.0
 ```
+
+Notice how the ranking reflects the scoring weights: Rooftop Lights beats Gym Hero despite not matching on genre, because the mood weight (+2.0) is higher than the genre weight (+1.5) in my recipe — a deliberate design choice consistent with treating "vibe" as more central than "category."
 
 **Screenshot or video** *(optional)*: <!-- Insert a screenshot or demo video link here -->
 
