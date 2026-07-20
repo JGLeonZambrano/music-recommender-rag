@@ -55,6 +55,10 @@ Each song earns points from four rules; its total score is the sum of whichever 
 
 **Scoring vs Ranking.** The scoring rule above judges a *single* song. The ranking rule then applies that score to every song in the catalog and sorts them high-to-low, returning the top *k* as recommendations. Scoring produces a number; ranking picks the winners.
 
+### Biases I Expect
+
+Because mood is my highest-weighted feature (+2.0), the system will over-privilege mood matches (a "happy" song in the wrong genre may still outrank a genre-perfect song with a different mood). Because I only score four features, the system also can't distinguish between two songs that match on all four but differ on, say, tempo or valence. And because my catalog only holds 18 songs across a handful of genres, any profile whose favorite_genre isn't well-represented will get shallow, repetitive results.
+
 ---
 
 ## Getting Started
