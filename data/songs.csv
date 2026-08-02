@@ -17,3 +17,37 @@ id,title,artist,genre,mood,energy,tempo_bpm,valence,danceability,acousticness
 16,Broken Signals,Redline Riot,punk,angry,0.92,172,0.30,0.58,0.06
 17,Salón Buenos Aires,Ordóñez Trio,tango,moody,0.48,110,0.35,0.45,0.82
 18,Neon Alibi,Voltline,synthwave,intense,0.86,128,0.52,0.78,0.15
+19,Blue Room Session,Marlow Grey,jazz,melancholy,0.32,85,0.35,0.55,0.72
+20,After Midnight Blues,Marlow Grey,jazz,sad,0.28,72,0.22,0.48,0.81
+21,Uptown Waltz,Halcyon Field,jazz,happy,0.55,124,0.78,0.68,0.42
+22,Smoke and Brass,Marlow Grey,jazz,chill,0.38,88,0.52,0.58,0.68
+23,Fire on the Ave,Static Reign,hip-hop,intense,0.89,140,0.42,0.87,0.12
+24,Corner Store Prophet,Bluewire,hip-hop,angry,0.85,152,0.28,0.79,0.09
+25,Late Bus Home Pt 2,Bluewire,hip-hop,melancholy,0.48,92,0.32,0.68,0.35
+26,No Signal,Static Reign,hip-hop,intense,0.91,148,0.38,0.85,0.11
+27,Basement Tape,Indigo Parade,indie,nostalgic,0.52,102,0.58,0.62,0.45
+28,Kitchen Light,Grey November,indie,melancholy,0.35,80,0.28,0.55,0.72
+29,Postcards Home,Indigo Parade,indie,hopeful,0.62,115,0.71,0.65,0.38
+30,Fluorescent Aisles,Grey November,indie,sad,0.28,72,0.22,0.48,0.78
+31,Weekend Static,Indigo Parade,indie,chill,0.48,98,0.55,0.60,0.52
+32,Porch Song,Halcyon Field,folk,hopeful,0.42,96,0.68,0.52,0.88
+33,River Bend,Sarah Vale,folk,nostalgic,0.35,88,0.55,0.48,0.91
+34,Dust Road,Halcyon Field,folk,melancholy,0.32,84,0.38,0.45,0.89
+35,Slow Burn,Amaris June,r&b,chill,0.45,92,0.58,0.72,0.32
+36,Velvet Hours,Amaris June,r&b,sad,0.38,80,0.35,0.68,0.42
+37,Golden Hour Talk,Kai Rivers,r&b,happy,0.68,108,0.82,0.78,0.28
+38,Nocturne in E,Chamber Nine,classical,melancholy,0.22,68,0.32,0.35,0.94
+39,String Quartet No 4,Chamber Nine,classical,chill,0.28,72,0.48,0.32,0.96
+40,Concerto Fragment,Chamber Nine,classical,intense,0.58,124,0.42,0.42,0.85
+41,Grid Pulse,Volt Circuit,electronic,intense,0.94,132,0.55,0.88,0.05
+42,Neon Rain,Volt Circuit,electronic,moody,0.72,118,0.42,0.82,0.08
+43,Deep Signal,Volt Circuit,electronic,focused,0.68,124,0.48,0.75,0.12
+44,Broken Glass Anthem,Redline Riot,punk,angry,0.96,178,0.32,0.62,0.04
+45,Nothing to Say,Fault Divider,punk,angry,0.92,168,0.28,0.58,0.08
+46,Static Youth,Fault Divider,punk,intense,0.88,162,0.38,0.65,0.11
+47,Milonga del Puerto,Ordóñez Trio,tango,melancholy,0.42,102,0.35,0.55,0.75
+48,Bandoneón Sunset,Ordóñez Trio,tango,nostalgic,0.38,96,0.42,0.52,0.78
+49,Rooftop Lights Reprise,Indigo Parade,indie pop,hopeful,0.72,120,0.85,0.78,0.32
+50,Highway 41,Neon Echo,pop,nostalgic,0.65,112,0.68,0.72,0.28
+51,Sunrise City Remix,Neon Echo,synthwave,happy,0.88,124,0.82,0.85,0.15
+52,Focus Flow Deep,LoRoom,lofi,focused,0.35,76,0.52,0.55,0.82

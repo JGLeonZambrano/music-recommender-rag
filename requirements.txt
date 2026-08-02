@@ -1,4 +1,17 @@
+# ---- Original Project 3 dependencies ----
 pandas
 pytest
 streamlit
 tabulate
+
+# ---- Project 4 additions: RAG pipeline ----
+# LLM client for Gemini (grounded generation step)
+google-genai
+# Loads GEMINI_API_KEY from .env automatically at import time
+python-dotenv
+# Sentence embeddings for semantic retrieval over the song corpus.
+# Small model (~90MB), runs locally, no API needed for embeddings.
+sentence-transformers
+# In-memory vector store for cosine similarity search.
+numpy
+scikit-learn

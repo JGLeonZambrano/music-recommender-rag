@@ -13,3 +13,8 @@ venv/
 
 # Pytest cache
 .pytest_cache/
+
+# Local secrets and virtualenv (added for Project 4)
+.env
+.venv/
+__pycache__/
