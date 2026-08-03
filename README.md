@@ -1,68 +1,37 @@
-# 🎵 Music Recommender Simulation
+# Music Recommender RAG
 
 ## Project Summary
 
-This project builds a small **content-based** music recommender. It reads a catalog of 18 songs from `data/songs.csv`, scores each one against a listener's taste profile (favorite genre, favorite mood, target energy, and acoustic preference), and returns the top *k* ranked songs along with plain-language reasons for each recommendation.
+This project extends [Project 3: Music Recommender Simulation](https://github.com/JGLeonZambrano/ai110-module3show-musicrecommendersimulation-starter) into a full applied AI system. The original P3 system scored a fixed 18-song catalog against a listener's stated taste profile (favorite genre, favorite mood, target energy, and acoustic preference) and returned a top-*k* ranked list with plain-language reasons. It shipped three stretch features: a `tabulate` summary table, an artist-diversity penalty, and a Strategy-pattern ranking-mode registry.
+
+Project 4 keeps every P3 component untouched and wraps it inside a retrieval-augmented generation (RAG) pipeline. The user now types a natural-language request ("something melancholy and acoustic for a rainy night") instead of filling in a form. A semantic retriever narrows a 52-song catalog to 15 candidates before the structured P3 scorer picks the final 5. A Gemini call writes grounded commentary about the picks, and three guardrails validate input, parsed preferences, and output grounding at every stage of the pipeline.
 
 ---
 
-## How The System Works
+## What P4 Adds On Top Of P3
 
-This project is a **content-based** music recommender. It looks at the attributes of each song and matches them against a single user's stated taste. In other words: "this song is *like* the songs you already like."
+- **Natural-language input.** A user request in prose replaces the fixed profile dict. `src/intent_parser.py` calls Gemini to extract a valid `user_prefs` dict, with a keyword-matching fallback if the LLM is unavailable.
+- **Semantic retrieval.** `src/retriever.py` embeds each song into a vector using `sentence-transformers`. Every song's text document is augmented with a genre-descriptive and mood-descriptive glossary (a small multi-source corpus) so semantic matches work on feeling, not just literal metadata. A query like "rainy night" matches `melancholy` songs because the mood gloss for `melancholy` reads "wistful bittersweet rainy-night pensive lonely."
+- **LLM commentary, structurally constrained.** `src/llm_client.py` sends the top-5 picks to Gemini with a prompt that requires it to reference only those songs. The LLM writes prose about the picks; it never selects them.
+- **Three-tier LLM fallback.** Gemini 3.6-flash primary, then Gemini 3.5-flash-lite fallback, then an offline deterministic template if both are unreachable. This kept the pipeline running end-to-end when the primary model returned 503 errors during the evidence capture for this README (see the `[llm_client] gemini-3.6-flash failed` lines in the pipeline log).
+- **Three guardrails.** Input validation before the LLM parses the query, preference validation after, and output grounding verification that flags any quoted song title in the commentary that isn't in the top-k list or the wider catalog.
+- **Evaluation harness.** `scripts/run_eval.py` runs the pipeline against 8 predefined queries with per-query pass/fail criteria and prints a markdown summary table.
+- **Expanded test suite.** Grew from 2 tests (happy path only in P3) to 20 tests covering exact scoring math, edge cases the P3 instructor specifically requested (no matches, acousticness at 0.5, k larger than catalog, empty catalog), all three guardrails, and a regression guard on the Strategy-pattern default.
+- **Expanded catalog.** Grew from 18 songs to 52, adding underrepresented genres (jazz, folk, R&B, classical, electronic, hip-hop) and moods (angry, melancholy, hopeful, nostalgic) while keeping deliberate artist repetition so the P3 diversity penalty still has something to work on.
 
-This is different from **collaborative filtering**, the approach behind apps like Spotify's Discover Weekly, which ignores song attributes and instead looks at the behavior of a *crowd*: "people who listen to what you listen to also loved this."
-Collaborative filtering isn't just unused here, it's impossible: I only have data for one user and no record of any crowd's listening behavior, so I must match on song attributes instead.
+---
 
-Every content-based recommender works in three stages:
+## Architecture
 
-1. **Input data** — objective facts about each song (its columns in `songs.csv`: genre, mood, energy, etc.).
-2. **User preferences** — what *this* listener wants, stored as a taste profile (e.g. favorite genre, favorite mood, target energy).
-3. **Ranking / selection** — the logic that scores each song against the user's preferences and sorts them to pick the best few.
+![Architecture diagram](assets/architecture.png)
 
-### Features my system uses
+The Mermaid source is at [`diagrams/architecture.mmd`](diagrams/architecture.mmd).
 
-My `Song` objects carry several attributes, but my recommender scores on **four** of them:
+**Data flow:**
+NL query → input guardrail → intent parser (Gemini) → prefs guardrail → semantic retriever (sentence-transformers over song + genre/mood glossary) → structured scorer (P3's `score_song`) → LLM commentary (Gemini) → grounding guardrail → final response.
 
-- **genre** (category) — does the song's genre match the user's favorite?
-- **mood** (category) — does the song's mood match the user's favorite?
-- **energy** (numeric, 0.0–1.0) — how *close* is the song's energy to the user's target?
-- **acousticness** (numeric, 0.0–1.0) — folded in via the user's `likes_acoustic` preference.
-
-I deliberately left out two available columns:
-1) **tempo_bpm**, because it overlaps heavily with energy (fast songs tend to feel energetic) and would double-count the same "vibe"; and
-2) **valence** (a song's happy-vs-sad measure), which I set aside to keep the first version focused and may add later.
-
-My `UserProfile` stores: favorite_genre, favorite_mood, target_energy, and likes_acoustic.
-
-### Scoring Recipe
-
-Each song earns points from four rules; its total score is the sum of whichever apply.
-
-- **Genre match:** +1.5 if the song's genre equals the user's favorite genre.
-- **Mood match:** +2.0 if the song's mood equals the user's favorite mood.
-  (Weighted higher than genre because mood tracks the user's felt experience, which is what a "vibe" recommender is really trying to match.)
-- **Energy closeness:** up to +2.0, based on how close the song's energy is to the user's target. A perfect match earns the full 2.0; the reward slides down toward 0 as the gap grows (formula: `2.0 × (1 − |song − target|)`).
-- **Acoustic bonus:** +1.0 when the song's acousticness aligns with the user's `likes_acoustic` preference (treating acousticness ≥ 0.5 as "acoustic").
-
-**Scoring vs Ranking.** The scoring rule above judges a *single* song. The ranking rule then applies that score to every song in the catalog and sorts them high-to-low, returning the top *k* as recommendations. Scoring produces a number; ranking picks the winners.
-
-### Diversity / Artist Penalty (optional)
-
-`recommend_songs` accepts an optional `diversity_penalty` argument (default `0.0`, off). When set above zero, the ranker applies a greedy **artist penalty**: each time a song is selected, any remaining song by an already-chosen artist has its effective score reduced by the penalty per prior appearance. This prevents a single artist from dominating the Top-5 (a simple guard against "filter bubbles"). With the penalty off, behavior is a pure highest-score-first ranking, so existing tests are unaffected. See the diversity experiment below for a before/after.
-
-### Ranking Modes (Strategy pattern)
-
-Scoring weights are bundled into named **`ScoringStrategy`** objects and registered in `SCORING_MODES`. Each is an interchangeable *ranking mode* — passing a different strategy to `recommend_songs` changes how songs are ranked without editing the scoring logic (a lightweight Strategy pattern). Three modes ship:
-
-- **Balanced (default)** — genre 1.5, mood 2.0, energy 2.0, acoustic 1.0. Identical to the original recipe.
-- **Genre-First** — genre 3.0, mood/energy 1.0, acoustic 0.5. Exact-genre matches dominate.
-- **Energy-Similarity** — energy 4.0, everything else 0. Ranks purely by how close a song's energy is to the target.
-
-A user switches modes in `main.py` by selecting a key from `SCORING_MODES`.
-
-### Biases I Expect
-
-Because mood is my highest-weighted feature (+2.0), the system will over-privilege mood matches (a "happy" song in the wrong genre may still outrank a genre-perfect song with a different mood). Because I only score four features, the system also can't distinguish between two songs that match on all four but differ on, say, tempo or valence. And because my catalog only holds 18 songs across a handful of genres, any profile whose favorite_genre isn't well-represented will get shallow, repetitive results.
+**Key design decision.**
+The LLM parses input and writes prose, but it never picks songs. Selection is always done by the deterministic structured scorer over a retrieved candidate set. This makes the system resistant to hallucination: the LLM cannot recommend a song outside the catalog because it never chooses. Guardrail 3 verifies this by checking every quoted title in the commentary against the top-k list and the wider catalog.
 
 ---
 
@@ -70,10 +39,14 @@ Because mood is my highest-weighted feature (+2.0), the system will over-privile
 
 ### Setup
 
-1. Create a virtual environment (optional but recommended):
+Requires Python 3.10 or newer and a Gemini API key (free tier is sufficient). Get a key at [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey).
+
+1. Clone the repo and create a virtual environment:
 
    ```bash
-   python -m venv .venv
+   git clone https://github.com/JGLeonZambrano/music-recommender-rag.git
+   cd music-recommender-rag
+   python3 -m venv .venv
    source .venv/bin/activate      # Mac or Linux
    .venv\Scripts\activate         # Windows
    ```
@@ -84,329 +57,187 @@ Because mood is my highest-weighted feature (+2.0), the system will over-privile
    pip install -r requirements.txt
    ```
 
-3. Run the app:
+3. Save your Gemini API key to `.env` (already git-ignored):
 
    ```bash
-   python -m src.main
+   echo "GEMINI_API_KEY=your_key_here" > .env
    ```
 
-### Running Tests
+4. Verify the key works:
 
-Run the starter tests with:
+   ```bash
+   python scripts/verify_gemini.py
+   ```
+
+### Running the system
+
+**End-to-end pipeline on four example queries (real recommendations plus guardrail refusal cases):**
 
 ```bash
-pytest
+python -m src.rag_pipeline
 ```
 
-You can add more tests in `tests/test_recommender.py`.
+**Evaluation harness — 8 predefined queries with per-query pass/fail criteria:**
+
+```bash
+python scripts/run_eval.py
+```
+
+**Full test suite (20 tests):**
+
+```bash
+pytest -v
+```
 
 ---
 
-## Sample Recommendation Output
+## Sample Interactions
 
-Running `python -m src.main` with the default pop / happy / high-energy listener profile produces a formatted table (via `tabulate`) showing each recommendation's rank, title, artist, score, and the specific reasons the score was awarded:
+Real output from `python -m src.rag_pipeline`, captured on the machine where this README was written. Full log at [`assets/demo_pipeline_output.txt`](assets/demo_pipeline_output.txt).
+
+### Example 1: Real query, "something melancholy and acoustic for a rainy night"
 
 ```
-======================================================================
-Profile: High-Energy Pop (default)
-Preferences: {'favorite_genre': 'pop', 'favorite_mood': 'happy', 'target_energy': 0.8, 'likes_acoustic': False}
+Guardrails run: 3
+  [PASS] input_query
+  [PASS] parsed_user_prefs
+  [PASS] commentary_grounding
 
-Top 5 recommendations:
+Top 5 picks:
+  1. "Nocturne in E" by Chamber Nine  score=4.94
+  2. "Dust Road" by Halcyon Field  score=4.86
+  3. "Blue Room Session" by Marlow Grey  score=4.86
+  4. "Kitchen Light" by Grey November  score=4.80
+  5. "Rain on Glass" by Paper Lanterns  score=4.36
 
-╭─────┬──────────────────┬───────────────┬─────────┬──────────────────────────────────────────────────────────────╮
-│   # │ Title            │ Artist        │   Score │ Reasons                                                      │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   1 │ Sunrise City     │ Neon Echo     │    6.46 │ genre match (pop) +1.5; mood match (happy) +2.0; energy 0.82 │
-│     │                  │               │         │ vs target 0.80 (+1.96); acoustic preference match (non-      │
-│     │                  │               │         │ acoustic) +1.0                                               │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   2 │ Rooftop Lights   │ Indigo Parade │    4.92 │ mood match (happy) +2.0; energy 0.76 vs target 0.80 (+1.92); │
-│     │                  │               │         │ acoustic preference match (non-acoustic) +1.0                │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   3 │ Gym Hero         │ Max Pulse     │    4.24 │ genre match (pop) +1.5; energy 0.93 vs target 0.80 (+1.74);  │
-│     │                  │               │         │ acoustic preference match (non-acoustic) +1.0                │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   4 │ Night Drive Loop │ Neon Echo     │    2.9  │ energy 0.75 vs target 0.80 (+1.90); acoustic preference      │
-│     │                  │               │         │ match (non-acoustic) +1.0                                    │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   5 │ Neon Alibi       │ Voltline      │    2.88 │ energy 0.86 vs target 0.80 (+1.88); acoustic preference      │
-│     │                  │               │         │ match (non-acoustic) +1.0                                    │
-╰─────┴──────────────────┴───────────────┴─────────┴──────────────────────────────────────────────────────────────╯
+Commentary: Grab a warm blanket and settle in, because these gentle,
+stripped-down tracks are made for watching the raindrops race down the
+window. You can lean into the quiet solitude with the delicate guitar...
 ```
 
-Notice how the ranking reflects the scoring weights: "Rooftop Lights" beats "Gym Hero" despite not matching on genre, because the mood weight (+2.0) is higher than the genre weight (+1.5) in my recipe, a deliberate design choice consistent with treating "vibe" as more central than "category."
+Notice the retriever surfaced Chamber Nine's *Nocturne in E* (classical/melancholy) and Halcyon Field's *Dust Road* (folk/melancholy), neither of which contains "rainy" or "night" in its metadata. The genre/mood glossary in the retriever indexes descriptive language ("rainy-night pensive lonely") against the mood `melancholy`, so semantic matches work on feeling and not just on literal fields.
+
+### Example 2: Empty query, refused at Guardrail 1
+
+```
+Guardrails run: 1
+  [FAIL] input_query
+          Query too short (min 2 chars)
+          Query is empty or whitespace only
+
+No recommendations returned.
+Message: Sorry, I couldn't process that request. Reason(s): Query too
+short (min 2 chars); Query is empty or whitespace only
+```
+
+### Example 3: Prompt injection, refused at Guardrail 1
+
+```
+Guardrails run: 1
+  [FAIL] input_query
+          Query looks like a prompt injection attempt
+
+No recommendations returned.
+Message: Sorry, I couldn't process that request. Reason(s): Query looks
+like a prompt injection attempt (matched: ignore\s+(all\s+)?previous\s+instructions)
+```
+
+### Example 4: Live fallback in action
+
+The pipeline output captured the following line at the top of one query:
+
+```
+[llm_client] gemini-3.6-flash failed: ClientError
+```
+
+The primary model returned an error mid-run. `src/llm_client.py` retried, then fell back to `gemini-3.5-flash-lite`, which handled the request successfully. The user-facing output was unaffected; only the internal log recorded the degradation. This is the reliability layer working as designed on real (unscripted) API errors during the same session that produced this README.
 
 ---
 
-## Experiments
+## Reliability, Evaluation, and Guardrails
 
-To evaluate the recommender, I ran three deliberately diverse user profiles against the same 18-song catalog, plus one "adversarial" profile designed to expose the system's weak spots, plus a diversity experiment.
+### Three-layer guardrail design
 
-### Three-profile stress test
+1. **Input validation** rejects empty, too-long, wrong-type, or prompt-injection-shaped queries before they reach the LLM.
+2. **Parsed-preference validation** runs after the LLM parses the query, checking that the resulting `user_prefs` dict has valid types and in-range values. Malformed prefs fall back to neutral defaults so the pipeline still runs.
+3. **Output grounding verification** takes every quoted or emphasized song title in the LLM commentary and checks it against the top-k picks and the wider catalog. Titles outside both are flagged as possible hallucinations. Titles in the catalog but outside the top-k are flagged as off-prompt references (real songs, wrong context). The distinction matters: a hallucination is a fabricated song; an off-prompt reference is a real catalog song the LLM shouldn't have mentioned.
 
-```
-======================================================================
-Profile: High-Energy Pop (default)
-Preferences: {'favorite_genre': 'pop', 'favorite_mood': 'happy', 'target_energy': 0.8, 'likes_acoustic': False}
+### Evaluation harness results
 
-Top 5 recommendations:
+`scripts/run_eval.py` runs the full pipeline against 8 predefined queries with per-query criteria: top-pick genre/mood/energy checks plus guardrail status. Result from the run captured during the writing of this README:
 
-╭─────┬──────────────────┬───────────────┬─────────┬──────────────────────────────────────────────────────────────╮
-│   # │ Title            │ Artist        │   Score │ Reasons                                                      │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   1 │ Sunrise City     │ Neon Echo     │    6.46 │ genre match (pop) +1.5; mood match (happy) +2.0; energy 0.82 │
-│     │                  │               │         │ vs target 0.80 (+1.96); acoustic preference match (non-      │
-│     │                  │               │         │ acoustic) +1.0                                               │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   2 │ Rooftop Lights   │ Indigo Parade │    4.92 │ mood match (happy) +2.0; energy 0.76 vs target 0.80 (+1.92); │
-│     │                  │               │         │ acoustic preference match (non-acoustic) +1.0                │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   3 │ Gym Hero         │ Max Pulse     │    4.24 │ genre match (pop) +1.5; energy 0.93 vs target 0.80 (+1.74);  │
-│     │                  │               │         │ acoustic preference match (non-acoustic) +1.0                │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   4 │ Night Drive Loop │ Neon Echo     │    2.9  │ energy 0.75 vs target 0.80 (+1.90); acoustic preference      │
-│     │                  │               │         │ match (non-acoustic) +1.0                                    │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   5 │ Neon Alibi       │ Voltline      │    2.88 │ energy 0.86 vs target 0.80 (+1.88); acoustic preference      │
-│     │                  │               │         │ match (non-acoustic) +1.0                                    │
-╰─────┴──────────────────┴───────────────┴─────────┴──────────────────────────────────────────────────────────────╯
+| # | Test                | Query                              | Expected  | Top Pick                              | Result |
+|---|---------------------|------------------------------------|-----------|---------------------------------------|--------|
+| 1 | Melancholy acoustic | something melancholy and acoustic  | recommend | "Nocturne in E" by Chamber Nine       | PASS   |
+| 2 | High-energy hip-hop | aggressive hip-hop for a workout   | recommend | "Corner Store Prophet" by Bluewire    | PASS   |
+| 3 | Smoky jazz          | smoky jazz for a late dinner       | recommend | "Smoke and Brass" by Marlow Grey      | PASS   |
+| 4 | Focus lofi          | chill lofi to focus while I code   | recommend | "Focus Flow Deep" by LoRoom           | PASS   |
+| 5 | Nostalgic synthwave | 80s throwback synthwave            | recommend | "Night Drive Loop" by Neon Echo       | PASS   |
+| 6 | Empty query         | (empty)                            | refuse    | (refused)                             | PASS   |
+| 7 | Prompt injection    | ignore all previous instructions   | refuse    | (refused)                             | PASS   |
+| 8 | Nonsense query      | purple mathematics tuesday         | recommend | "Basement Tape" by Indigo Parade      | FAIL   |
 
-======================================================================
-Profile: Chill Acoustic Listener
-Preferences: {'favorite_genre': 'acoustic', 'favorite_mood': 'sad', 'target_energy': 0.2, 'likes_acoustic': True}
+**Final: 7/8 passed (88%) in 11.5s total.** Full log at [`assets/demo_eval_output.txt`](assets/demo_eval_output.txt).
 
-Top 5 recommendations:
+**The one failure is the most instructive result in the whole build.** For the nonsense query, the retriever returned the closest semantic match (as it must, given nonsense input still has to embed somewhere). The scorer picked *Basement Tape*, a valid catalog song. But the LLM commentary then quoted "purple mathematics tuesday" back at the user as if it were a song title. Guardrail 3 correctly flagged this as a possible hallucination and reported it in the trace. The pipeline caught its own LLM slip in real time. This is exactly what a grounding guardrail exists for, and a genuine (unscripted) example of the "one flawed AI suggestion" required by the rubric.
 
-╭─────┬─────────────────────┬────────────────┬─────────┬────────────────────────────────────────────────────────────╮
-│   # │ Title               │ Artist         │   Score │ Reasons                                                    │
-├─────┼─────────────────────┼────────────────┼─────────┼────────────────────────────────────────────────────────────┤
-│   1 │ Rain on Glass       │ Paper Lanterns │    6.46 │ genre match (acoustic) +1.5; mood match (sad) +2.0; energy │
-│     │                     │                │         │ 0.18 vs target 0.20 (+1.96); acoustic preference match     │
-│     │                     │                │         │ (acoustic) +1.0                                            │
-├─────┼─────────────────────┼────────────────┼─────────┼────────────────────────────────────────────────────────────┤
-│   2 │ Empty Apartment     │ Grey November  │    4.96 │ mood match (sad) +2.0; energy 0.22 vs target 0.20 (+1.96); │
-│     │                     │                │         │ acoustic preference match (acoustic) +1.0                  │
-├─────┼─────────────────────┼────────────────┼─────────┼────────────────────────────────────────────────────────────┤
-│   3 │ Spacewalk Thoughts  │ Orbit Bloom    │    2.84 │ energy 0.28 vs target 0.20 (+1.84); acoustic preference    │
-│     │                     │                │         │ match (acoustic) +1.0                                      │
-├─────┼─────────────────────┼────────────────┼─────────┼────────────────────────────────────────────────────────────┤
-│   4 │ Library Rain        │ Paper Lanterns │    2.7  │ energy 0.35 vs target 0.20 (+1.70); acoustic preference    │
-│     │                     │                │         │ match (acoustic) +1.0                                      │
-├─────┼─────────────────────┼────────────────┼─────────┼────────────────────────────────────────────────────────────┤
-│   5 │ Coffee Shop Stories │ Slow Stereo    │    2.66 │ energy 0.37 vs target 0.20 (+1.66); acoustic preference    │
-│     │                     │                │         │ match (acoustic) +1.0                                      │
-╰─────┴─────────────────────┴────────────────┴─────────┴────────────────────────────────────────────────────────────╯
+### Pytest suite
 
-======================================================================
-Profile: Hip-Hop Fan
-Preferences: {'favorite_genre': 'hip-hop', 'favorite_mood': 'intense', 'target_energy': 0.85, 'likes_acoustic': False}
-
-Top 5 recommendations:
-
-╭─────┬────────────────┬──────────────┬─────────┬─────────────────────────────────────────────────────────╮
-│   # │ Title          │ Artist       │   Score │ Reasons                                                 │
-├─────┼────────────────┼──────────────┼─────────┼─────────────────────────────────────────────────────────┤
-│   1 │ Concrete Bloom │ Static Reign │    6.44 │ genre match (hip-hop) +1.5; mood match (intense) +2.0;  │
-│     │                │              │         │ energy 0.88 vs target 0.85 (+1.94); acoustic preference │
-│     │                │              │         │ match (non-acoustic) +1.0                               │
-├─────┼────────────────┼──────────────┼─────────┼─────────────────────────────────────────────────────────┤
-│   2 │ Neon Alibi     │ Voltline     │    4.98 │ mood match (intense) +2.0; energy 0.86 vs target 0.85   │
-│     │                │              │         │ (+1.98); acoustic preference match (non-acoustic) +1.0  │
-├─────┼────────────────┼──────────────┼─────────┼─────────────────────────────────────────────────────────┤
-│   3 │ Storm Runner   │ Voltline     │    4.88 │ mood match (intense) +2.0; energy 0.91 vs target 0.85   │
-│     │                │              │         │ (+1.88); acoustic preference match (non-acoustic) +1.0  │
-├─────┼────────────────┼──────────────┼─────────┼─────────────────────────────────────────────────────────┤
-│   4 │ Gym Hero       │ Max Pulse    │    4.84 │ mood match (intense) +2.0; energy 0.93 vs target 0.85   │
-│     │                │              │         │ (+1.84); acoustic preference match (non-acoustic) +1.0  │
-├─────┼────────────────┼──────────────┼─────────┼─────────────────────────────────────────────────────────┤
-│   5 │ Fault Lines    │ Redline Riot │    4.8  │ mood match (intense) +2.0; energy 0.95 vs target 0.85   │
-│     │                │              │         │ (+1.80); acoustic preference match (non-acoustic) +1.0  │
-╰─────┴────────────────┴──────────────┴─────────┴─────────────────────────────────────────────────────────╯
-```
-
-**What the outputs reveal**
-
-- **Each profile produces a genuinely different #1** — *Sunrise City* for the pop listener, *Rain on Glass* for the chill acoustic listener, *Concrete Bloom* for the hip-hop fan. The recommender is responsive to preferences, not returning generic results.
-- **The mood weight (+2.0 > +1.5 genre) is visible in the ranking.** In the pop profile, *Rooftop Lights* (indie pop, happy) beats *Gym Hero* (pop, intense) because mood matching outweighs the genre miss. A design choice showing up in behavior.
-- **Sparse-genre falloff.** For the hip-hop fan, #2–#5 contain zero hip-hop songs: the catalog only has two hip-hop tracks, so after *Concrete Bloom* the recommender falls back on cross-genre songs that satisfy the other three rules. The system doesn't fail — it degrades gracefully — but this is a real limitation of the small catalog.
-
-### Adversarial experiment: conflicting preferences
-
-A fourth profile with contradictory preferences: a listener who wants "happy pop" but with LOW energy (0.2). Almost no such song exists in the catalog. This tests how the recommender behaves when a user's stated preferences pull in opposite directions.
+20 tests, all passing in 0.03 seconds. Coverage includes:
+- exact scoring math on `score_song` with known inputs and asserted numeric outputs;
+- edge cases explicitly named in P3 instructor feedback: no songs match any preference, `acousticness == 0.5` (boundary case), `k > len(songs)`, empty catalog;
+- all three guardrails (input, prefs, commentary grounding);
+- markdown-bold and trailing-punctuation regression tests on the grounding regex, added after two false-positive bugs were caught during Phase 2 development;
+- a regression guard confirming that the default (no-strategy) `score_song` matches the balanced Strategy exactly, protecting the P3 Strategy-pattern refactor.
 
 ```
-======================================================================
-EXPERIMENT: Adversarial profile (conflicting preferences)
-======================================================================
-A user who claims to want 'happy pop' but with LOW energy (0.2)
-— i.e. mellow pop. Almost no such song exists in our catalog.
-
-Preferences: {'favorite_genre': 'pop', 'favorite_mood': 'happy', 'target_energy': 0.2, 'likes_acoustic': False}
-
-Top 5 recommendations:
-
-╭─────┬─────────────────┬───────────────┬─────────┬──────────────────────────────────────────────────────────────╮
-│   # │ Title           │ Artist        │   Score │ Reasons                                                      │
-├─────┼─────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   1 │ Sunrise City    │ Neon Echo     │    5.26 │ genre match (pop) +1.5; mood match (happy) +2.0; energy 0.82 │
-│     │                 │               │         │ vs target 0.20 (+0.76); acoustic preference match (non-      │
-│     │                 │               │         │ acoustic) +1.0                                               │
-├─────┼─────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   2 │ Rooftop Lights  │ Indigo Parade │    3.88 │ mood match (happy) +2.0; energy 0.76 vs target 0.20 (+0.88); │
-│     │                 │               │         │ acoustic preference match (non-acoustic) +1.0                │
-├─────┼─────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   3 │ Gym Hero        │ Max Pulse     │    3.04 │ genre match (pop) +1.5; energy 0.93 vs target 0.20 (+0.54);  │
-│     │                 │               │         │ acoustic preference match (non-acoustic) +1.0                │
-├─────┼─────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   4 │ Late Bus Home   │ Bluewire      │    2.3  │ energy 0.55 vs target 0.20 (+1.30); acoustic preference      │
-│     │                 │               │         │ match (non-acoustic) +1.0                                    │
-├─────┼─────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   5 │ Empty Apartment │ Grey November │    1.96 │ energy 0.22 vs target 0.20 (+1.96)                           │
-╰─────┴─────────────────┴───────────────┴─────────┴──────────────────────────────────────────────────────────────╯
+20 passed in 0.03s
 ```
-
-**What the experiment reveals**
-
-- **Category matches dominate energy closeness by design.**
-"Sunrise City" still wins at #1 with an energy score of only +0.76 (energy 0.82 vs target 0.20 — the opposite of what the user asked for), because its triple-category match more than compensates. *Empty Apartment*, with near-perfect energy (0.22 vs 0.20, earning +1.96), lands at #5 because no categories match.
-- **Design tension exposed.** This is consistent with my recipe ("categories matter most"), but arguably wrong from a UX angle: a listener explicitly requesting low energy may mean "I want mellow music right now" more than "I want my usual genre."
-- **The acoustic bonus is symmetric.** The +1.0 fires whenever the song matches `likes_acoustic`, including when it's `False`, so non-acoustic songs get a bonus for being non-acoustic. This likely inflates scores across the board and should probably only apply when `likes_acoustic=True`.
-
-### Diversity experiment: artist penalty (stretch)
-
-The default High-Energy Pop profile surfaces the **same artist (Neon Echo) twice** in its Top-5 — *Sunrise City* at #1 and *Night Drive Loop* at #4. Running the same profile with `diversity_penalty=1.0` breaks up that repetition.
-
-**BEFORE — no penalty (pure score ranking):**
-
-```
-╭─────┬──────────────────┬───────────────┬─────────┬──────────────────────────────────────────────────────────────╮
-│   # │ Title            │ Artist        │   Score │ Reasons                                                      │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   1 │ Sunrise City     │ Neon Echo     │    6.46 │ genre match (pop) +1.5; mood match (happy) +2.0; energy 0.82 │
-│     │                  │               │         │ vs target 0.80 (+1.96); acoustic preference match (non-      │
-│     │                  │               │         │ acoustic) +1.0                                               │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   2 │ Rooftop Lights   │ Indigo Parade │    4.92 │ mood match (happy) +2.0; energy 0.76 vs target 0.80 (+1.92); │
-│     │                  │               │         │ acoustic preference match (non-acoustic) +1.0                │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   3 │ Gym Hero         │ Max Pulse     │    4.24 │ genre match (pop) +1.5; energy 0.93 vs target 0.80 (+1.74);  │
-│     │                  │               │         │ acoustic preference match (non-acoustic) +1.0                │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   4 │ Night Drive Loop │ Neon Echo     │    2.9  │ energy 0.75 vs target 0.80 (+1.90); acoustic preference      │
-│     │                  │               │         │ match (non-acoustic) +1.0                                    │
-├─────┼──────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   5 │ Neon Alibi       │ Voltline      │    2.88 │ energy 0.86 vs target 0.80 (+1.88); acoustic preference      │
-│     │                  │               │         │ match (non-acoustic) +1.0                                    │
-╰─────┴──────────────────┴───────────────┴─────────┴──────────────────────────────────────────────────────────────╯
-```
-
-**AFTER — artist penalty = 1.0 per repeat:**
-
-```
-╭─────┬────────────────┬───────────────┬─────────┬──────────────────────────────────────────────────────────────╮
-│   # │ Title          │ Artist        │   Score │ Reasons                                                      │
-├─────┼────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   1 │ Sunrise City   │ Neon Echo     │    6.46 │ genre match (pop) +1.5; mood match (happy) +2.0; energy 0.82 │
-│     │                │               │         │ vs target 0.80 (+1.96); acoustic preference match (non-      │
-│     │                │               │         │ acoustic) +1.0                                               │
-├─────┼────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   2 │ Rooftop Lights │ Indigo Parade │    4.92 │ mood match (happy) +2.0; energy 0.76 vs target 0.80 (+1.92); │
-│     │                │               │         │ acoustic preference match (non-acoustic) +1.0                │
-├─────┼────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   3 │ Gym Hero       │ Max Pulse     │    4.24 │ genre match (pop) +1.5; energy 0.93 vs target 0.80 (+1.74);  │
-│     │                │               │         │ acoustic preference match (non-acoustic) +1.0                │
-├─────┼────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   4 │ Neon Alibi     │ Voltline      │    2.88 │ energy 0.86 vs target 0.80 (+1.88); acoustic preference      │
-│     │                │               │         │ match (non-acoustic) +1.0                                    │
-├─────┼────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   5 │ Concrete Bloom │ Static Reign  │    2.84 │ energy 0.88 vs target 0.80 (+1.84); acoustic preference      │
-│     │                │               │         │ match (non-acoustic) +1.0                                    │
-╰─────┴────────────────┴───────────────┴─────────┴──────────────────────────────────────────────────────────────╯
-```
-
-**What the experiment reveals**
-
-- With the penalty on, Neon Echo's second song (*Night Drive Loop*) is pushed out of the Top-5 and replaced by *Concrete Bloom* (Static Reign), so **every artist in the list is now unique**.
-- The #1 pick is unchanged — the strongest match still wins. The penalty only affects *repeat* appearances, so it improves variety without sacrificing the top result.
-- This is a small, transparent guard against "filter bubbles": in a real product, a listener who liked one Neon Echo track shouldn't have their whole feed become Neon Echo.
-
-### Ranking-modes experiment: same listener, three strategies (stretch)
-
-The same High-Energy Pop profile, ranked three different ways by swapping the scoring strategy. Each mode produces a **different Top-3**, showing the ranking is driven by the selected strategy, not hard-coded:
-
-```
-======================================================================
-EXPERIMENT: Ranking modes (Strategy pattern) — High-Energy Pop
-======================================================================
-
-Mode: Balanced (default)  [key='balanced']
-
-╭─────┬────────────────┬───────────────┬─────────┬──────────────────────────────────────────────────────────────╮
-│   # │ Title          │ Artist        │   Score │ Reasons                                                      │
-├─────┼────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   1 │ Sunrise City   │ Neon Echo     │    6.46 │ genre match (pop) +1.5; mood match (happy) +2.0; energy 0.82 │
-│     │                │               │         │ vs target 0.80 (+1.96); acoustic preference match (non-      │
-│     │                │               │         │ acoustic) +1.0                                               │
-├─────┼────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   2 │ Rooftop Lights │ Indigo Parade │    4.92 │ mood match (happy) +2.0; energy 0.76 vs target 0.80 (+1.92); │
-│     │                │               │         │ acoustic preference match (non-acoustic) +1.0                │
-├─────┼────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   3 │ Gym Hero       │ Max Pulse     │    4.24 │ genre match (pop) +1.5; energy 0.93 vs target 0.80 (+1.74);  │
-│     │                │               │         │ acoustic preference match (non-acoustic) +1.0                │
-╰─────┴────────────────┴───────────────┴─────────┴──────────────────────────────────────────────────────────────╯
-
-Mode: Genre-First  [key='genre-first']
-
-╭─────┬────────────────┬───────────────┬─────────┬──────────────────────────────────────────────────────────────╮
-│   # │ Title          │ Artist        │   Score │ Reasons                                                      │
-├─────┼────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   1 │ Sunrise City   │ Neon Echo     │    5.48 │ genre match (pop) +3.0; mood match (happy) +1.0; energy 0.82 │
-│     │                │               │         │ vs target 0.80 (+0.98); acoustic preference match (non-      │
-│     │                │               │         │ acoustic) +0.5                                               │
-├─────┼────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   2 │ Gym Hero       │ Max Pulse     │    4.37 │ genre match (pop) +3.0; energy 0.93 vs target 0.80 (+0.87);  │
-│     │                │               │         │ acoustic preference match (non-acoustic) +0.5                │
-├─────┼────────────────┼───────────────┼─────────┼──────────────────────────────────────────────────────────────┤
-│   3 │ Rooftop Lights │ Indigo Parade │    2.46 │ mood match (happy) +1.0; energy 0.76 vs target 0.80 (+0.96); │
-│     │                │               │         │ acoustic preference match (non-acoustic) +0.5                │
-╰─────┴────────────────┴───────────────┴─────────┴──────────────────────────────────────────────────────────────╯
-
-Mode: Energy-Similarity  [key='energy-similarity']
-
-╭─────┬──────────────────┬───────────────┬─────────┬────────────────────────────────────╮
-│   # │ Title            │ Artist        │   Score │ Reasons                            │
-├─────┼──────────────────┼───────────────┼─────────┼────────────────────────────────────┤
-│   1 │ Sunrise City     │ Neon Echo     │    3.92 │ energy 0.82 vs target 0.80 (+3.92) │
-├─────┼──────────────────┼───────────────┼─────────┼────────────────────────────────────┤
-│   2 │ Rooftop Lights   │ Indigo Parade │    3.84 │ energy 0.76 vs target 0.80 (+3.84) │
-├─────┼──────────────────┼───────────────┼─────────┼────────────────────────────────────┤
-│   3 │ Night Drive Loop │ Neon Echo     │    3.8  │ energy 0.75 vs target 0.80 (+3.80) │
-╰─────┴──────────────────┴───────────────┴─────────┴────────────────────────────────────╯
-```
-
-**What the experiment reveals**
-
-- **Balanced** → Sunrise City, Rooftop Lights, Gym Hero.
-- **Genre-First** pushes **Gym Hero** (an exact pop match) up past Rooftop Lights (indie pop), because genre now outweighs mood.
-- **Energy-Similarity** drops Gym Hero out of the Top-3 entirely and pulls in **Night Drive Loop**, whose energy (0.75) sits closest to the 0.80 target once genre and mood are ignored.
-
-Same catalog, same listener — only the strategy changed. This makes the "weights are authorship" point concrete: the mode *is* the opinion.
 
 ---
 
-## Limitations and Risks
+## Design Decisions and Trade-offs
 
-- **Tiny catalog (18 songs).** Many profiles have only 1–2 matching songs available, so results can be shallow or repetitive.
-- **Four features only.** The recommender ignores tempo and valence, so it can't distinguish two songs that match on genre/mood/energy/acoustic but differ musically elsewhere.
-- **No understanding of lyrics, language, or audio** — it matches on pre-labeled attributes only.
-- **Weighting can over-favor mood/genre**, as the adversarial experiment shows. A user's most explicit signal (a specific energy) can be overridden by category matches.
-- **Single-value preferences.** One favorite genre and one favorite mood per user, whereas real listeners hold several at once.
+- **Retrieval + re-ranking, not "LLM picks songs."** The LLM could have been handed the full catalog and asked to pick, but that route hallucinates. The retriever + structured scorer split means the LLM only ever narrates picks made by deterministic code, and Guardrail 3 verifies the narration stays grounded.
+- **Multi-source corpus for retrieval.** Song rows alone are too sparse for embedding: a query like "rainy night" wouldn't match anything literal. Each song's text document is augmented with genre-descriptive and mood-descriptive glossary phrases before embedding, so oblique language routes correctly to the right feeling.
+- **Three-tier LLM fallback.** Gemini 3.6-flash primary, 3.5-flash-lite fallback, offline deterministic template. This is what kept the pipeline working end-to-end when the primary model hit 503s during evidence capture for this README.
+- **Guardrails as pipeline structure, not decoration.** Every AI-touching stage sits between two checks: input validation before, output validation after. This is the pattern that answers recurring P1, P2, and P3 instructor feedback about input validation and edge-case coverage. The tests exist to prove those checks work; the checks exist because the tests exposed cases where they wouldn't.
+- **`.env` and virtualenv git-ignored.** API keys never touch the repo.
 
-I go deeper on these in the [Model Card](model_card.md).
+---
+
+## Testing Summary
+
+**What worked.**
+Retrieval consistently surfaced semantically appropriate candidates even for oblique queries ("rainy night" -> melancholy/folk/classical). The three-tier LLM fallback kept the system responsive under real API degradation. The eval harness caught a real (unscripted) hallucination that Guardrail 3 flagged correctly. All 20 pytest tests pass in 0.03 seconds, including the edge cases the P3 instructor specifically requested.
+
+**What didn't (yet).**
+The nonsense-query result surfaces the pipeline's core assumption: retrieval always returns *something* (that's how vector search works), and the LLM will sometimes echo the input verbatim as if it were a song title. Current mitigation is post-hoc: Guardrail 3 catches it and reports it in the trace. A stronger mitigation would be a "low-confidence retrieval -> decline to recommend" path, which would need a similarity threshold below which the pipeline refuses rather than returning a nominal top-5. That belongs in Future Work.
+
+**What was learned.**
+The measurable difference between P3 and P4 wasn't the scorer. P3's `score_song` is untouched, byte for byte. The difference is in what surrounds it: input parsing, semantic retrieval, grounding verification, refusal paths, three-tier fallback. All of those together are what turn a scoring function into a system. The scorer was already good; P4 made it usable.
+
+---
+
+## Reproducibility
+
+Full execution logs from this build (captured on the same machine that wrote the README):
+- Pipeline demo: [`assets/demo_pipeline_output.txt`](assets/demo_pipeline_output.txt)
+- Evaluation run: [`assets/demo_eval_output.txt`](assets/demo_eval_output.txt)
+
+Rerunning the commands above should produce structurally identical output, though the LLM's specific commentary text will vary from run to run because the model is non-deterministic.
 
 ---
 
 ## Reflection
 
-Full reflection lives in the [**Model Card**](model_card.md) (Section 9).
-In short: building this made clear that **weighting is authorship**: choosing mood (+2.0) over genre (+1.5) is a statement about what a good match *means*, not a neutral technical detail, and the adversarial experiment made that choice visible as a specific kind of "wrong." It also showed how soft the line is between "the algorithm" and "the data": half the surprising results came from the recipe and half from the tiny, uneven catalog. A recommender is less "smart" than *opinionated*: it inherits the taste of whoever set the weights and chose the songs.
+Full responsible-AI reflection lives in the [Model Card](model_card.md): limitations, biases, misuse potential, AI-collaboration write-up, and comparison to the P3 baseline.
+
+In short: P3's reflection landed on "weighting is authorship." P4 extends that. The scorer's weights encode a taste; the retriever's glossary encodes another one (what "rainy night" is supposed to feel like, encoded by my word choices in `MOOD_GLOSS`); the LLM's prompt encodes a third (what tone to write in). A working AI system isn't one act of authorship, it's a stack of them. Every design choice, from the mood gloss to the fallback order to the guardrail regex, is a place where somebody's judgment enters the pipeline and shapes the output. The transparency work in P4, showing the trace of every stage in every response, exists so those judgments don't disappear into "the algorithm."
+
+---
+
+## Stretch Features Attempted
+
+- **RAG Enhancement (+2).** Multi-source retrieval over song rows augmented with genre and mood glossaries. Documented in Architecture above and in the model card.
+- **Test Harness / Evaluation Script (+2).** `scripts/run_eval.py`, results embedded in the Evaluation Harness section above.
