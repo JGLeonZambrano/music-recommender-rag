@@ -24,9 +24,19 @@ flowchart TD
 
     Scorer --> LLM
 
-    LLM["<b>LLM Commentary</b><br/>src/llm_client.py<br/>gemini-3.6-flash primary<br/>gemini-3.5-flash-lite fallback<br/>offline template if both fail"]
+    LLM["<b>LLM Commentary (v1 draft)</b><br/>src/llm_client.py<br/>gemini-3.6-flash primary<br/>gemini-3.5-flash-lite fallback<br/>offline template if both fail"]
 
-    LLM --> G3
+    Critic["<b>Self-Critique (Agentic Workflow)</b><br/>src/rag_pipeline.py<br/>Gemini reviews v1 vs picks<br/>returns JSON: on_topic, grounded, concerns"]
+
+    Decision{{"<b>Accept or revise?</b><br/>branch on critic's JSON verdict"}}
+
+    Reviser["<b>Reviser (Agentic Workflow)</b><br/>src/rag_pipeline.py<br/>rewrites addressing concerns<br/>output becomes v2 commentary"]
+
+    LLM --> Critic
+    Critic --> Decision
+    Decision -->|on_topic=T, grounded=T, concerns=empty| G3
+    Decision -->|any flag raised| Reviser
+    Reviser --> G3
 
     G3{{"<b>Guardrail 3</b>: Grounding Verification<br/>src/guardrails.py<br/>flags quoted titles not in top-k<br/>distinguishes hallucination vs off-prompt"}}
 
@@ -48,6 +58,7 @@ flowchart TD
     classDef data fill:#ffd,stroke:#c93,stroke-width:2px
 
     class G1,G2,G3 guardrail
-    class Parser,LLM llm
+    class Parser,LLM,Critic,Reviser llm
+    class Decision guardrail
     class Eval,Tests test
     class Corpus data
