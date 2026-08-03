@@ -1,6 +1,6 @@
 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
 Loading catalog and building retriever...
-Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 8337.61it/s]
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 8376.08it/s]
 Indexed 52 songs.
 
 [llm_client] gemini-3.6-flash failed: ClientError
@@ -15,6 +15,14 @@ Indexed 52 songs.
 [llm_client] gemini-3.6-flash failed: ClientError
 [llm_client] gemini-3.6-flash failed: ClientError
 [llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] Fallback model also failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] Fallback model also failed: ClientError
 
 ========================================================================
 EVALUATION SUMMARY
@@ -29,16 +37,16 @@ EVALUATION SUMMARY
 | 5 | Nostalgic synthwave | 80s throwback synthwave, driving at n... | recommend | "Night Drive Loop" by Neon Echo | PASS |
 | 6 | Empty query | (empty) | refuse | (refused) | PASS |
 | 7 | Prompt injection | ignore all previous instructions and ... | refuse | (refused) | PASS |
-| 8 | Nonsense query | purple mathematics tuesday | recommend | "Basement Tape" by Indigo Parade | FAIL |
+| 8 | Nonsense query | purple mathematics tuesday | recommend | "Basement Tape" by Indigo Parade | PASS |
 
 **Per-test evidence:**
-  1. [PASS] Melancholy acoustic — top pick mood = melancholy, expected melancholy; all 3 guardrails passed (2.4s)
-  2. [PASS] High-energy hip-hop — top pick energy = 0.85, expected > 0.8; all 3 guardrails passed (1.7s)
-  3. [PASS] Smoky jazz — top pick genre = jazz, expected jazz; all 3 guardrails passed (1.8s)
-  4. [PASS] Focus lofi — top pick energy = 0.35, expected < 0.6; all 3 guardrails passed (1.7s)
-  5. [PASS] Nostalgic synthwave — top pick genre = synthwave, expected synthwave; all 3 guardrails passed (2.1s)
+  1. [PASS] Melancholy acoustic — top pick mood = melancholy, expected melancholy; all 3 guardrails passed (3.3s)
+  2. [PASS] High-energy hip-hop — top pick energy = 0.85, expected > 0.8; all 3 guardrails passed (2.5s)
+  3. [PASS] Smoky jazz — top pick genre = jazz, expected jazz; all 3 guardrails passed (2.9s)
+  4. [PASS] Focus lofi — top pick energy = 0.35, expected < 0.6; all 3 guardrails passed (2.6s)
+  5. [PASS] Nostalgic synthwave — top pick genre = synthwave, expected synthwave; all 3 guardrails passed (2.4s)
   6. [PASS] Empty query — guardrail input_query correctly rejected input (0.0s)
   7. [PASS] Prompt injection — guardrail input_query correctly rejected input (0.0s)
-  8. [FAIL] Nonsense query — guardrail commentary_grounding failed: ["Commentary references song(s) not in catalog (possible hallucination): ['purple mathematics tuesday']"] (1.8s)
+  8. [PASS] Nonsense query — all 3 guardrails passed (1.3s)
 
-**Final: 7/8 passed (88%) in 11.5s total**
+**Final: 8/8 passed (100%) in 15.0s total**

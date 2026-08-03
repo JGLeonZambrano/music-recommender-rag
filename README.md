@@ -241,3 +241,4 @@ In short: P3's reflection landed on "weighting is authorship." P4 extends that. 
 
 - **RAG Enhancement (+2).** Multi-source retrieval over song rows augmented with genre and mood glossaries. Documented in Architecture above and in the model card.
 - **Test Harness / Evaluation Script (+2).** `scripts/run_eval.py`, results embedded in the Evaluation Harness section above.
+- **Agentic Workflow Enhancement (+2).** Self-critique and revise loop after commentary generation. A critic LLM call reviews the draft against the query and picks, returns structured JSON, and the pipeline branches: accept the draft or rewrite it with a reviser LLM call. Full stage-by-stage reasoning is recorded on every `RagResult` and surfaces in [`assets/demo_pipeline_output.txt`](assets/demo_pipeline_output.txt) as the `Self-critique:` and `Action:` lines. Details in [`ai_interactions.md`](ai_interactions.md).

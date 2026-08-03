@@ -1,10 +1,12 @@
 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
 Loading catalog and building retriever (one-time setup)...
 
-Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 8124.22it/s]
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 8594.71it/s]
 ========================================================================
 [Real query]  QUERY: 'something melancholy and acoustic for a rainy night'
 
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
 [llm_client] gemini-3.6-flash failed: ClientError
 Guardrails run: 3
   [PASS] input_query
@@ -12,13 +14,16 @@ Guardrails run: 3
   [PASS] commentary_grounding
 
 Top 5 picks:
-  1. "Nocturne in E" by Chamber Nine  score=4.94
-  2. "Dust Road" by Halcyon Field  score=4.86
-  3. "Blue Room Session" by Marlow Grey  score=4.86
-  4. "Kitchen Light" by Grey November  score=4.80
-  5. "Rain on Glass" by Paper Lanterns  score=4.36
+  1. "Nocturne in E" by Chamber Nine  score=4.96
+  2. "Dust Road" by Halcyon Field  score=4.76
+  3. "Blue Room Session" by Marlow Grey  score=4.76
+  4. "Kitchen Light" by Grey November  score=4.70
+  5. "Rain on Glass" by Paper Lanterns  score=4.46
 
-Commentary: Grab a warm blanket and settle in, because these gentle, stripped-down tracks are made for watching the raindrops race down the window. You can lean into the quiet solitude with the delicate guitar wo...
+Self-critique: on_topic=True, grounded=True, concerns=[]
+Action: commentary ACCEPTED without revision
+
+Commentary: There is nothing quite like watching the rain fall while wrapped in soft, gentle melodies, and these acoustic picks set that exact mood. You might start with the quiet intimacy of *Rain on Glass* by P...
 
 ========================================================================
 [Empty query (should be refused)]  QUERY: ''
@@ -46,6 +51,7 @@ Message: Sorry — I couldn't process that request. Reason(s): Query looks like 
 
 [llm_client] gemini-3.6-flash failed: ClientError
 [llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
 Guardrails run: 3
   [PASS] input_query
   [PASS] parsed_user_prefs
@@ -58,5 +64,8 @@ Top 5 picks:
   4. "Storm Runner" by Voltline  score=4.98
   5. "Static Youth" by Fault Divider  score=4.96
 
-Commentary: To fuel your workout, I've put together a high-energy lineup featuring some fantastic, intense hip-hop tracks right on target with your request. You'll definitely want to queue up "Fire on the Ave," "...
+Self-critique: on_topic=True, grounded=True, concerns=[]
+Action: commentary ACCEPTED without revision
+
+Commentary: To power up your workout, I've put together a selection of high-intensity tracks that hit the exact energy level you're looking for. You'll get a heavy dose of hip-hop with relentless drive from Stati...
 

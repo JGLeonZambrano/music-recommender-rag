@@ -37,6 +37,38 @@ Write a short, warm paragraph (3-5 sentences) explaining why these songs match t
 Reference specific songs by title and artist. Do NOT recommend any song not in the list above. Do NOT invent songs or artists.
 """
 
+CRITIC_PROMPT = """You are reviewing music recommendations before they are sent to a user.
+
+The user asked: "{query}"
+
+The recommender selected these songs:
+{picks}
+
+Another AI wrote this commentary:
+"{commentary}"
+
+Answer these three questions in a JSON object, with NO prose outside the JSON:
+- "on_topic" (bool): does the commentary address the user's request?
+- "grounded" (bool): does the commentary reference ONLY songs from the selected list, without inventing any?
+- "concerns" (list of short strings): specific issues, or [] if none.
+
+Respond with ONLY the JSON. No code fences, no preamble.
+"""
+
+REVISER_PROMPT = """You are rewriting music-recommendation commentary.
+
+The user asked: "{query}"
+
+The selected songs are:
+{picks}
+
+The previous commentary was flagged for these concerns:
+{concerns}
+
+Write a NEW short paragraph (3-5 sentences) that addresses the concerns.
+Reference specific songs by title and artist. Reference ONLY the songs above.
+Do NOT invent any songs or artists.
+"""
 
 @dataclass
 class RagResult:
@@ -141,11 +173,64 @@ def recommend(
         for s, _score, reasons in recommendations
     )
     prompt = COMMENTARY_PROMPT.format(query=query, picks=picks_text)
-    commentary, llm_source = generate(prompt)
+    commentary_v1, llm_source_v1 = generate(prompt)
     trace["stages"].append({
-        "stage": "llm_commentary",
-        "source": llm_source,
+        "stage": "llm_commentary_v1",
+        "source": llm_source_v1,
+        "text": commentary_v1,
     })
+
+    # Stage 4b (Agentic Workflow): self-critique the draft commentary
+    critic_prompt = CRITIC_PROMPT.format(
+        query=query, picks=picks_text, commentary=commentary_v1
+    )
+    critic_response, critic_source = generate(critic_prompt)
+
+    import json as _json
+    import re as _re
+    critic_json = None
+    critic_match = _re.search(r"\{.*\}", critic_response, _re.DOTALL)
+    if critic_match:
+        try:
+            critic_json = _json.loads(critic_match.group(0))
+        except _json.JSONDecodeError:
+            critic_json = None
+
+    trace["stages"].append({
+        "stage": "llm_self_critique",
+        "source": critic_source,
+        "raw_response": critic_response[:400],
+        "parsed": critic_json,
+    })
+
+    # Stage 4c: decide whether to accept or revise
+    commentary = commentary_v1
+    revision_applied = False
+    if critic_json and (
+        not critic_json.get("on_topic", True)
+        or not critic_json.get("grounded", True)
+        or critic_json.get("concerns")
+    ):
+        concerns = critic_json.get("concerns", ["general quality"])
+        reviser_prompt = REVISER_PROMPT.format(
+            query=query, picks=picks_text, concerns="; ".join(concerns)
+        )
+        commentary_v2, reviser_source = generate(reviser_prompt)
+        commentary = commentary_v2
+        revision_applied = True
+        trace["stages"].append({
+            "stage": "llm_commentary_v2",
+            "source": reviser_source,
+            "reason": concerns,
+            "text": commentary_v2,
+        })
+    else:
+        trace["stages"].append({
+            "stage": "llm_commentary_accepted",
+            "note": "critic approved v1 without revision",
+        })
+
+    trace["revision_applied"] = revision_applied
 
     # Guardrail 3: verify commentary is grounded in the top-k picks
     allowed_titles = [s["title"] for s, _score, _reasons in recommendations]
@@ -197,6 +282,22 @@ if __name__ == "__main__":
             print(f"\nTop {len(result.recommendations)} picks:")
             for i, (song, score, _reasons) in enumerate(result.recommendations, 1):
                 print(f'  {i}. "{song["title"]}" by {song["artist"]}  score={score:.2f}')
+
+            # Show the agentic self-critique chain
+            critique_stage = next(
+                (s for s in result.trace["stages"] if s["stage"] == "llm_self_critique"),
+                None,
+            )
+            if critique_stage and critique_stage.get("parsed"):
+                p = critique_stage["parsed"]
+                print(f"\nSelf-critique: on_topic={p.get('on_topic')}, "
+                      f"grounded={p.get('grounded')}, "
+                      f"concerns={p.get('concerns')}")
+            if result.trace.get("revision_applied"):
+                print("Action: commentary REVISED after critique")
+            else:
+                print("Action: commentary ACCEPTED without revision")
+
             print(f"\nCommentary: {result.commentary[:200]}...")
         else:
             print(f"\nNo recommendations returned.\nMessage: {result.commentary}")
