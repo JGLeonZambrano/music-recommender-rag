@@ -1,0 +1,53 @@
+flowchart TD
+    User([User natural-language query<br/>e.g. 'melancholy acoustic for a rainy night']) --> G1
+
+    G1{{"<b>Guardrail 1</b>: Input Validation<br/>rejects empty, too long,<br/>prompt-injection patterns"}}
+    G1 -->|rejected| Refuse1([Refusal message<br/>returned to user])
+    G1 -->|passed| Parser
+
+    Parser["<b>Intent Parser</b><br/>src/intent_parser.py<br/>Gemini extracts structured user_prefs<br/>keyword fallback if LLM offline"]
+    Parser --> G2
+
+    G2{{"<b>Guardrail 2</b>: Parsed Prefs Validation<br/>type checks + range checks<br/>on target_energy, likes_acoustic"}}
+    G2 -->|invalid| DefaultPrefs["Neutral default prefs<br/>pipeline continues"]
+    G2 -->|passed| Retriever
+    DefaultPrefs --> Retriever
+
+    Retriever["<b>Semantic Retriever</b><br/>src/retriever.py<br/>sentence-transformers embeds<br/>song docs + genre/mood glossary<br/>cosine similarity → top-15 candidates"]
+
+    Corpus[("<b>Multi-source corpus</b><br/>data/songs.csv (52 songs)<br/>+ genre_gloss + mood_gloss")]
+    Corpus -.embeddings.-> Retriever
+
+    Retriever --> Scorer
+
+    Scorer["<b>Structured Scorer</b><br/>src/recommender.py<br/>score_song weighted formula<br/>+ optional artist-penalty diversity<br/>picks top-5 from 15 candidates"]
+
+    Scorer --> LLM
+
+    LLM["<b>LLM Commentary</b><br/>src/llm_client.py<br/>gemini-3.6-flash primary<br/>gemini-3.5-flash-lite fallback<br/>offline template if both fail"]
+
+    LLM --> G3
+
+    G3{{"<b>Guardrail 3</b>: Grounding Verification<br/>src/guardrails.py<br/>flags quoted titles not in top-k<br/>distinguishes hallucination vs off-prompt"}}
+
+    G3 --> Output([Final response<br/>top-5 picks + reasons<br/>+ grounded commentary<br/>+ full trace of every stage])
+
+    Eval["<b>Evaluation Harness</b><br/>scripts/run_eval.py<br/>8 predefined queries<br/>per-query pass/fail criteria"]
+    Tests["<b>Pytest Suite</b><br/>tests/test_recommender.py<br/>20 tests: exact math,<br/>edge cases, guardrails"]
+
+    Eval -.tests.-> Parser
+    Eval -.tests.-> Scorer
+    Eval -.tests.-> G3
+    Tests -.tests.-> Scorer
+    Tests -.tests.-> G1
+    Tests -.tests.-> G3
+
+    classDef guardrail fill:#fee,stroke:#c33,stroke-width:2px
+    classDef llm fill:#eef,stroke:#33c,stroke-width:2px
+    classDef test fill:#efe,stroke:#3c3,stroke-width:2px
+    classDef data fill:#ffd,stroke:#c93,stroke-width:2px
+
+    class G1,G2,G3 guardrail
+    class Parser,LLM llm
+    class Eval,Tests test
+    class Corpus data
