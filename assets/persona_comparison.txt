@@ -1,0 +1,87 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+Loading catalog and building retriever...
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]Loading weights: 100%|██████████| 103/103 [00:00<00:00, 8377.38it/s]
+Indexed 52 songs.
+
+========================================================================
+QUERY: something melancholy and acoustic for a rainy night
+========================================================================
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+
+--- BASELINE (warm music guide) ---
+Grab a warm blanket and settle in, because these gentle, stripped-down tracks are the perfect soundtrack for watching the rain fall outside your window. You can ease into the evening with the delicate classical notes of Chamber Nine's "Nocturne in E" or the quiet introspection of "Kitchen Light" by Grey November. If you're looking for a touch of warmth in the chill, Halcyon Field's folk-infused "Dust Road" and Marlow Grey's jazzy "Blue Room Session" offer a beautifully melancholy atmosphere. Finally, Paper Lanterns' aptly named "Rain on Glass" captures that hushed, rainy-night feeling with its exceptionally soft, acoustic resonance.
+
+--- SPECIALIZED (Record Store Clerk) ---
+Halcyon Field uses a Taylor steel-string with a cracked bridge. It sounds like an apartment where the radiator clanks and the tenant hasn't opened the mail in three weeks. Play it after midnight when the foot traffic stops. Keep the volume low enough to hear the hiss between tracks.
+
+--- METRICS ---
+  baseline_len_chars: 640
+  specialized_len_chars: 283
+  baseline_avg_sentence_words: 24.5
+  specialized_avg_sentence_words: 12.2
+  baseline_exclamations: 0
+  specialized_exclamations: 0
+  baseline_cliches: 3
+  specialized_cliches: 0
+
+========================================================================
+QUERY: smoky jazz for a late dinner with friends
+========================================================================
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+
+--- BASELINE (warm music guide) ---
+Set the mood for a late dinner with friends by starting with the warm, laid-back grooves of "Smoke and Brass" by Marlow Grey. Keep the conversation flowing smoothly over the plates with the intimate, reflective tones of "Blue Room Session" by Marlow Grey and "Coffee Shop Stories" by Slow Stereo. As the evening winds down into the early hours, let the gentle, subdued instrumentation of "After Midnight Blues" by Marlow Grey provide the perfect smoky backdrop.
+
+--- SPECIALIZED (Record Store Clerk) ---
+Marlow Grey is ninety percent mute trumpet and ten percent room noise. The drummer uses brushes on a snare that needs tuning. It plays well at the end of the night when the plates are cleared and the bill is paid. Nobody listens to the solos. It occupies the air between the table and the ceiling tiles.
+
+--- METRICS ---
+  baseline_len_chars: 461
+  specialized_len_chars: 303
+  baseline_avg_sentence_words: 25.3
+  specialized_avg_sentence_words: 11.4
+  baseline_exclamations: 0
+  specialized_exclamations: 0
+  baseline_cliches: 0
+  specialized_cliches: 0
+
+========================================================================
+QUERY: 80s throwback synthwave, driving at night
+========================================================================
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+[llm_client] gemini-3.6-flash failed: ClientError
+
+--- BASELINE (warm music guide) ---
+Hop in and set your headlights for a late-night cruise, because these tracks capture that unmistakable 80s synthwave aesthetic. Neon Echo’s "Night Drive Loop" and Volt Circuit’s "Neon Rain" nail that moody, after-hours atmosphere with the exact driving energy you're looking for. If you want to lean even deeper into the neon-lit vibe, Voltline's "Neon Alibi" brings a slightly more intense pulse to the journey, while Bluewire's "Late Bus Home" and Neon Echo’s "Sunrise City Remix" round out the ride with rich electronic textures.
+
+--- SPECIALIZED (Record Store Clerk) ---
+Skip the Bluewire. It sits weirdly against the other four. Play the Neon Echo and Volt Circuit tracks back-to-back if you want forty minutes of analog basslines that don't go anywhere. The Voltline track is too fast for three in the morning on an unlit two-lane. Keep the volume at a flat five. Good for empty gas station parking lots off Interstate 90.
+
+--- METRICS ---
+  baseline_len_chars: 532
+  specialized_len_chars: 353
+  baseline_avg_sentence_words: 28.0
+  specialized_avg_sentence_words: 10.5
+  baseline_exclamations: 0
+  specialized_exclamations: 0
+  baseline_cliches: 1
+  specialized_cliches: 0
+
+========================================================================
+AGGREGATE COMPARISON
+========================================================================
+Avg sentence length (baseline):    25.9 words
+Avg sentence length (specialized): 11.4 words
+Total exclamations (baseline):     0
+Total exclamations (specialized):  0
+Total cliches (baseline):          4
+Total cliches (specialized):       0

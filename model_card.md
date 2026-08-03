@@ -230,3 +230,46 @@ The recurring instructor feedback across P1, P2, and P3 asked for input validati
 - **Multi-turn refinement.** The pipeline currently treats each query in isolation. Real users say "more like #3 but calmer," and the pipeline should be able to hold the conversation.
 - **Catalog expansion via real data.** Move from the 52-song hand-curated catalog to a real music dataset (MusicOSet, MTG-Jamendo). This would surface which biases are the recipe's and which are the catalog's, a distinction the P3 reflection already flagged as important.
 - **Domain transfer.** The pipeline architecture (retriever + structured scorer + LLM narrator + guardrails) is domain-agnostic. The natural next project is a book recommender using the same skeleton over Open Library metadata: swap the corpus, swap the gloss, keep everything else. That transfer is planned as a personal follow-up.
+
+---
+
+## 16. P4 Stretch: Specialization via Constrained Persona
+
+**What was specialized.**
+The default LLM commentary in `src/rag_pipeline.py` uses a warm-music-guide voice, prompted to write 3-5 warm sentences about the picks. For the specialization stretch, `src/personas.py` defines a second voice, **Record Store Clerk**, that constrains tone, sentence length, vocabulary, and forbidden phrases via a system prompt plus a one-shot example. Both voices comment on the same picks from the same pipeline: only the prompt changes.
+
+**How the specialization is enforced.**
+No fine-tuning. No dataset training. Constrained-tone/style via few-shot prompting, which is one of the three approaches the rubric explicitly names. The persona system prompt bans specific cliches ("you'll love", "perfect for", "immerse yourself", "get ready to", "settle in"), bans exclamation marks, caps output at 5 sentences, and requires concrete auditory vocabulary about how the songs sound (not how the listener will feel). A one-shot example shows the model what "correct" output looks like for a different query.
+
+**Measured baseline-vs-specialized comparison.**
+`scripts/persona_comparison.py` runs the same three queries through both voices and prints numerical metrics. Full log at `assets/persona_comparison.txt`. Aggregate across the three queries:
+
+| Metric                       | Baseline (warm guide) | Specialized (record store clerk) |
+|------------------------------|-----------------------|----------------------------------|
+| Avg sentence length (words)  | 25.9                  | 11.4                             |
+| Total exclamations           | 0                     | 0                                |
+| Total banned cliches         | 4                     | 0                                |
+
+The specialization measurably differs from the baseline on two of three metrics: sentence length dropped by 56%, and the four cliches the baseline produced dropped to zero. The exclamation count is unchanged because Gemini's default already doesn't use exclamations for these queries, so this metric neither confirms nor denies the specialization; it is honestly reported rather than dropped.
+
+**What the metrics actually show, in prose.**
+The numbers only capture surface features. The genuinely interesting difference is in the *kind* of information each voice supplies. Compare the same query, "something melancholy and acoustic for a rainy night":
+
+*Baseline (warm guide):*
+> Grab a warm blanket and settle in, because these gentle, stripped-down tracks are the perfect soundtrack for watching the rain fall outside your window. You can ease into the evening with the delicate classical notes of Chamber Nine's "Nocturne in E" or the quiet introspection of "Kitchen Light" by Grey November...
+
+*Specialized (record store clerk):*
+> Halcyon Field uses a Taylor steel-string with a cracked bridge. It sounds like an apartment where the radiator clanks and the tenant hasn't opened the mail in three weeks. Play it after midnight when the foot traffic stops. Keep the volume low enough to hear the hiss between tracks.
+
+The baseline tells the listener what mood the songs will produce ("perfect soundtrack for watching the rain fall"). The specialized voice tells the listener what the songs sound like ("Taylor steel-string with a cracked bridge") and where they belong ("after midnight when the foot traffic stops"). The persona instruction "reference the room where the song would play, not the emotion it produces" is doing visible work in the output. The same pattern holds for the other two queries: on the jazz query the specialized voice notes "ninety percent mute trumpet and ten percent room noise"; on the synthwave query it explicitly excludes one of the five picks ("skip the Bluewire, it sits weirdly against the other four") and gives listening context ("empty gas station parking lots off Interstate 90"). The warm guide never contradicts a pick; the record store clerk will.
+
+**Why this counts as specialization and not just prompt engineering.**
+The rubric asks for specialized model behavior via "few-shot patterns, synthetic datasets, or constrained tone/style." All three are prompt-based interventions on a base model. The distinguishing feature is measurable, reproducible output differences, which the metrics above demonstrate. A fine-tuned checkpoint would be one implementation; a system prompt + few-shot example that constrains behavior to a demonstrably different regime is another. Both change how the model behaves without changing the model itself.
+
+**Honest limitations.**
+- **The persona voice is a stylistic constraint, not a factual constraint.** It changes tone, not correctness. The record store clerk voice happened to volunteer plausible-sounding but unverifiable claims about the songs ("Taylor steel-string with a cracked bridge," "the drummer uses brushes on a snare that needs tuning"). These are not in the catalog and cannot be checked. In production, this voice would need a factuality guardrail on the specific claims it makes about instruments and production, on top of the grounding guardrail on song titles. Guardrail 3 still verifies title grounding; it does not verify auditory description.
+- **One persona is not a persona system.** A real product would have multiple selectable voices and a UI-level toggle. This project ships one persona to demonstrate that specialization works, not to build the toggle infrastructure.
+- **The chosen cliche list is my judgment.** Someone else writing "what counts as a cliche" would get a different metric. The measurable-difference claim is honest; the specific words in the ban list are authorial choices, same as everything else on the "weighting is authorship" thread.
+
+**What surprised me.**
+The specialized voice will criticize the recommendations. On the synthwave query the record store clerk voice said "Skip the Bluewire. It sits weirdly against the other four." That's a genuine judgment about the *selection*, not just the tone. I did not prompt for that behavior; it emerged from the "specific, unsentimental judgment" framing. This is the flip side of the honest limitation above: the voice is capable of authorial judgment, which is what makes it interesting, and that same capability lets it invent plausible-sounding facts. Style and hallucination are related.

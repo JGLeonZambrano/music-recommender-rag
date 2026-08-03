@@ -67,3 +67,28 @@ Three things distinguish this from a linear chain:
 1. **A decision point.** The pipeline actively branches based on the critic's structured output. Different queries route through different downstream stages.
 2. **Role separation.** The critic and reviser use different prompts and are aware of each other's outputs: the reviser sees both the picks and the specific concerns the critic raised.
 3. **Auditable reasoning.** Every stage is logged with its role, its input, and its output, so a reader can reconstruct the full decision chain after the fact.
+
+---
+
+## Fine-Tuning or Specialization (P4 Stretch) — Persona-Constrained Commentary
+
+**Which specialization pattern did I use?**
+
+**Constrained tone and style via few-shot prompting.** Not fine-tuning. `src/personas.py` defines a persona dict with a system prompt (the "Record Store Clerk" voice with explicit rules: fragments allowed, exclamations banned, no cliches, references the room not the emotion) and a one-shot example showing correct output for a different query. `scripts/persona_comparison.py` runs the same picks through both the baseline commentary prompt and the persona-constrained prompt.
+
+**Where the pattern lives in the code.**
+
+- `src/personas.py`: the `PERSONA_CLERK` dict and the `generate_persona_commentary()` function.
+- `scripts/persona_comparison.py`: the driver script that runs both voices on three queries and reports numerical metrics.
+- `assets/persona_comparison.txt`: the captured comparison output cited in model card Section 16.
+
+**What the intermediate reasoning looks like.**
+
+Every run of `scripts/persona_comparison.py` prints both the baseline and specialized commentary side by side for each query, plus per-query metrics (character count, average sentence length, exclamation count, banned-cliche count), plus an aggregate summary. This gives a full audit trail of how the specialization altered each individual output, not just the aggregate. See `assets/persona_comparison.txt`.
+
+**What I verified manually.**
+
+- The persona system prompt actually constrains the output (sentence length halved, cliches dropped to zero).
+- The comparison is fair: same picks, same query, only the prompt changes.
+- The specialized voice sometimes volunteers unverifiable auditory claims ("Taylor steel-string with a cracked bridge"), which is a real limitation documented in model card Section 16. Style change and factuality are related.
+- Guardrail 3 still runs on persona-generated commentary in the pipeline (though the comparison script bypasses the pipeline to isolate the voice change).

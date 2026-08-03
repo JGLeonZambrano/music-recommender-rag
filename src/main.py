@@ -13,6 +13,7 @@ from .recommender import load_songs, recommend_songs, SCORING_MODES
 from tabulate import tabulate
 
 def main() -> None:
+    print("Note: this is the Project 3 profile-based runner. For the Project 4 RAG pipeline (natural-language queries + guardrails + self-critique loop), run: python -m src.rag_pipeline\n")
     songs = load_songs("data/songs.csv")
     print(f"\nCatalog size: {len(songs)} songs\n")
 
